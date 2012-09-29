@@ -3,7 +3,8 @@ module Coder (
     repl
 ) where
 
-import Control.Monad.Instances
+import Control.Monad.Error
+
 import Tokenizer
 import Parser
 
@@ -15,18 +16,15 @@ type Failable = Either String
 main = interact repl
 
 repl :: String -> String
-repl = eval . replParse . tokenize
+repl = eval . replParse [] . tokenize
 
-replParse :: Monad m => [Failable [Token]] -> [m Decl]
-replParse = replParseLine []
-
-replParseLine :: Monad m => [Decl] -> [Failable [Token]] -> [m Decl]
-replParseLine decls (tokens:rest) = case tokens >>= parse decls of
-        Right [decl@(De _)] -> (return decl):(replParseLine [] rest)
-        Right newDecls      -> replParseLine newDecls rest
-        Left message        -> (fail message):(replParseLine [] rest)
-replParseLine (x:xs) [] = [fail $ "Repl: insufficient decls" ++ " " ++ show (xs)]
-replParseLine []     [] = []
+replParse :: (Error e, MonadError e m) => [Decl] -> [Failable [Token]] -> [m Decl]
+replParse decls (tokens:rest) = case tokens >>= parse decls of
+        Right [decl@(De _)] -> (return decl):(replParse [] rest)
+        Right newDecls      -> replParse newDecls rest
+        Left message        -> (throwError . strMsg $ message):(replParse [] rest)
+replParse (x:xs) [] = [throwError . strMsg $ "Repl: insufficient decls" ++ " " ++ show (xs)]
+replParse []     [] = []
         
 eval :: [Failable Decl] -> String
 eval = unlines . map show
