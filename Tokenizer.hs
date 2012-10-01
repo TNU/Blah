@@ -33,8 +33,7 @@ getOneToken str@(x:xs)
     | isNum x       = getNum str
     | isLetter x    = getId str
     | isOp x        = getOp str
-    | otherwise     = (throwError . strMsg $ 
-                            ("TOKENIZE: umatched token '" ++ (show x) ++ "'"), xs)
+    | otherwise     = (tokenizeFail $ "umatched token '" ++ (show x) ++ "'", xs)
           
 getNum ::  (Error e, MonadError e m) => String -> (m Token, String)
 getNum str = (return (INT (read numStr)), rest)
@@ -50,3 +49,9 @@ getOp ('+':rest) = (return PLUS, rest)
 getOp ('-':rest) = (return MINUS, rest)
 getOp ('*':rest) = (return MULT, rest)
 getOp ('/':rest) = (return DIV, rest)
+
+
+-- error handling
+tokenizeFail :: (Error e, MonadError e m) => String -> m a
+tokenizeFail = throwError . strMsg . ("[tokenize] " ++)
+

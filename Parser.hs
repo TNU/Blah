@@ -80,8 +80,7 @@ reduce ((Df fact):rest) tokens = reduce ((Dt (Tf fact)):rest) tokens
 reduce ((Dt term):rest) tokens = reduce ((De (Et term)):rest) tokens
 
 reduce decls@[_]    []      = return decls
-reduce decls        tokens  = throwError . strMsg $ 
-                        "PARSE: " ++ (show decls) ++ " " ++ (show tokens)
+reduce decls        tokens  = parseFail $ (show decls) ++ " " ++ (show tokens)
 
             
 isExprOp tok        = tok `elem` [PLUS, MINUS]
@@ -89,7 +88,12 @@ isTermOp tok        = tok `elem` [MULT, DIV]
 
 isNegatable (INT _) = True
 isNegatable _       = False
+
+-- error handling
+parseFail :: (Error e, MonadError e m) => String -> m a
+parseFail = throwError . strMsg . ("[parse] " ++)
           
+-- testing
 parseStr :: String -> Either String [Decl]
 parseStr str = head (tokenize str) >>= parse []
 
