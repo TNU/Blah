@@ -18,15 +18,15 @@ isNum x     = x `elem` ['0'..'9']
 isLetter x  = x `elem` (['a'..'z'] ++ ['A'..'Z'])
 isOp x      = x `elem` "+-*/"    
            
-tokenize :: (Error e, MonadError e m) => String -> [m [Token]]
-tokenize [] = [(return [])]
+tokenize :: (Error e, MonadError e m) => String -> (m [Token], String)
+tokenize [] = (return [], "")
 tokenize (x:xs) 
-    | isNewline x   = ((return []) : (tokenize xs))
+    | isNewline x   = (return [], xs)
     | isSpace x     = tokenize xs
-tokenize str = newCurLine : otherLines
+tokenize str = (curTokens, restLines)
             where (token, rest) = getOneToken str
-                  (curLine:otherLines) = tokenize rest
-                  newCurLine = liftM2 (:) token curLine
+                  (restToks, restLines) = tokenize rest
+                  curTokens = liftM2 (:) token restToks
                   
 getOneToken :: (Error e, MonadError e m) => String -> (m Token, String)
 getOneToken str@(x:xs)
@@ -53,5 +53,5 @@ getOp ('/':rest) = (return DIV, rest)
 
 -- error handling
 tokenizeFail :: (Error e, MonadError e m) => String -> m a
-tokenizeFail = throwError . strMsg . ("[tokenize] " ++)
+tokenizeFail = throwError . strMsg . ("<tokenize> " ++)
 

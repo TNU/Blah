@@ -1,5 +1,4 @@
 module Coder (
-    Value(..),
     repl
 ) where
 
@@ -13,25 +12,27 @@ type Failable = Either String
 data Value = Vi Integer
            deriving (Show)
 
-main = interact repl
+repl :: IO ()
+repl = getContents >>= replRun
 
-repl :: String -> String
-repl = eval . replParse [] . tokenize
+replRun :: String -> IO ()
+replRun = sequence_ . replRunRest
 
-replParse :: (Error e, MonadError e m) => [Decl] -> [Failable [Token]] -> [m Decl]
-replParse decls (tokens:rest) = case tokens >>= parse decls of
-        Right [decl@(De _)] -> (return decl):(replParse [] rest)
-        Right newDecls      -> replParse newDecls rest
-        Left message        -> (passFailMsg message):(replParse [] rest)
-replParse (x:xs) [] = [replFail $ "insufficient decls" ++ " " ++ show (xs)]
-replParse []     [] = []
+replRunLine :: Either String [Decl] -> String -> [IO ()]
+replRunLine (Left error)            input = (putStrLn error):(replRunRest input)
+replRunLine (Right [expr@(De _)])   input = (print (evalExpr expr input)):(replRunRest input)
+replRunLine (Right [])              []    = []
+replRunLine (Right unmatched)       []    = [replFail "unmatched decls at end of input"]
+replRunLine (Right unmatched)       input = replRunLine newDecls restInput
+        where  (tokens, restInput) = tokenize input
+               newDecls = tokens >>= parse unmatched
 
-eval :: [Failable Decl] -> String
-eval = unlines . map show
+replRunRest :: String -> [IO ()]
+replRunRest = replRunLine (return [])
+               
+evalExpr :: Decl -> String -> Value
+evalExpr decls input = Vi 1
 
 -- error handling
-replFail :: (Error e, MonadError e m) => String -> m a
-replFail = throwError . strMsg . ("[repl] " ++)
-
-passFailMsg :: (Error e, MonadError e m) => String -> m a
-passFailMsg = throwError . strMsg
+replFail :: String -> IO ()
+replFail = putStrLn . ("<repl> " ++)

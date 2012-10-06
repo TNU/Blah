@@ -91,11 +91,11 @@ isNegatable _       = False
 
 -- error handling
 parseFail :: (Error e, MonadError e m) => String -> m a
-parseFail = throwError . strMsg . ("[parse] " ++)
+parseFail = throwError . strMsg . ("<parse> " ++)
           
 -- testing
 parseStr :: String -> Either String [Decl]
-parseStr str = head (tokenize str) >>= parse []
+parseStr str = fst (tokenize str) >>= parse []
 
 parseTest = (parseStr "1 + 2" == Right [De (Add (Et (Tf (Fi 1))) (Tf (Fi 2)))])
          && (parseStr "1 * 2" == Right [De (Et (Mult (Tf (Fi 1)) (Fi 2)))])
