@@ -2,37 +2,45 @@ module Coder (
     repl
 ) where
 
+import Control.Monad (liftM2)
 import Control.Monad.Error
+import Control.Monad.State
 
-import Tokenizer
-import Parser
+import Tokenizer (tokenize)
+import Parser (parse, Decl(..))
+import Runner
            
-type Failable = Either String
-
-data Value = Vi Integer
-           deriving (Show)
-
+type Failable = Either String           
+           
 repl :: IO ()
 repl = getContents >>= replRun
 
 replRun :: String -> IO ()
-replRun = sequence_ . replRunRest
+replRun input = sequence_ $ evalState replRunRest input
 
-replRunLine :: Either String [Decl] -> String -> [IO ()]
-replRunLine (Left error)            input = (putStrLn error):(replRunRest input)
-replRunLine (Right [expr@(De _)])   input = (print (evalExpr expr input)):(replRunRest input)
-replRunLine (Right [])              []    = []
-replRunLine (Right unmatched)       []    = [replFail "unmatched decls at end of input"]
-replRunLine (Right unmatched)       input = replRunLine newDecls restInput
-        where  (tokens, restInput) = tokenize input
-               newDecls = tokens >>= parse unmatched
-
-replRunRest :: String -> [IO ()]
+replRunRest :: State Runtime [IO ()]
 replRunRest = replRunLine (return [])
-               
-evalExpr :: Decl -> String -> Value
-evalExpr decls input = Vi 1
 
+replRunLine :: Failable [Decl] -> State Runtime [IO ()]
+replRunLine (Left error)        = replPrint error 
+replRunLine (Right [(De expr)]) = evalExpr expr >>= safePrintVal
+replRunLine (Right unmatched)   = do 
+        input <- getInput
+        case (unmatched, input) of
+            ([], []) -> return []
+            (xs, []) -> return [replFail "unmatched decls at end of input"]
+            _     -> do let (tokens, restInput) = tokenize input
+                            decls = tokens >>= parse unmatched
+                        putInput restInput
+                        replRunLine decls
+ 
+safePrintVal :: Failable Value -> State Runtime [IO ()]
+safePrintVal (Right val) = printVal val replRunRest
+safePrintVal (Left error) = printStr error replRunRest
+ 
+replPrint :: String -> State Runtime [IO ()]
+replPrint str = printStr str replRunRest
+ 
 -- error handling
 replFail :: String -> IO ()
 replFail = putStrLn . ("<repl> " ++)
