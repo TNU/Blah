@@ -1,6 +1,6 @@
 module Tokenizer (
     Token(..),
-    tokenize
+    tokenize,
 ) where
 
 import Data.List (span)
@@ -11,6 +11,7 @@ data Token = INT Integer
            | ID String
            | PLUS | MINUS | MULT | DIV
            | LPAREN | RPAREN
+           | ASSN
            deriving (Show, Eq)
            
 isNewline x = x `elem` "\n\r"
@@ -35,6 +36,7 @@ getOneToken ('*':xs) = (return MULT,    xs)
 getOneToken ('/':xs) = (return DIV,     xs)
 getOneToken ('(':xs) = (return LPAREN,  xs)
 getOneToken (')':xs) = (return RPAREN,  xs)
+getOneToken (':':xs) = (return ASSN,    xs)
 getOneToken str@(x:xs)
     | isNum x        = getNum str
     | isLetter x     = getId str

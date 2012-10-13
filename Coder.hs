@@ -16,14 +16,15 @@ repl :: IO ()
 repl = getContents >>= replRun
 
 replRun :: String -> IO ()
-replRun input = sequence_ $ evalState replRunRest input
+replRun input = sequence_ $ evalState replRunRest (newRuntime input)
 
 replRunRest :: State Runtime [IO ()]
 replRunRest = replRunLine (return [])
 
 replRunLine :: Failable [Decl] -> State Runtime [IO ()]
 replRunLine (Left error)        = replPrint error 
-replRunLine (Right [(De expr)]) = evalExpr expr >>= safePrintVal
+replRunLine (Right [(De expr)]) = evalExpr expr >>= showValOrErr
+replRunLine (Right [(Ds stmt)]) = evalStmt stmt >>= showOnlyErr
 replRunLine (Right unmatched)   = do 
         input <- getInput
         case (unmatched, input) of
@@ -31,12 +32,16 @@ replRunLine (Right unmatched)   = do
             (xs, []) -> return [replFail "unmatched decls at end of input"]
             _     -> do let (tokens, restInput) = tokenize input
                             decls = tokens >>= parse unmatched
-                        putInput restInput
+                        updateInput restInput
                         replRunLine decls
+                        
+showOnlyErr :: Failable () -> State Runtime [IO ()]
+showOnlyErr (Right ())    = replRunRest
+showOnlyErr (Left error)  = printStr error replRunRest
  
-safePrintVal :: Failable Value -> State Runtime [IO ()]
-safePrintVal (Right val) = printVal val replRunRest
-safePrintVal (Left error) = printStr error replRunRest
+showValOrErr :: Failable Value -> State Runtime [IO ()]
+showValOrErr (Right val) = printVal val replRunRest
+showValOrErr (Left error) = printStr error replRunRest
  
 replPrint :: String -> State Runtime [IO ()]
 replPrint str = printStr str replRunRest

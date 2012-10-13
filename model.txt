@@ -1,0 +1,18 @@
+var: 2
+door: 112 + 5 * (1 + 15 / 3)
+dd: "Dunkin Donut"
+empty: true 
+abc: abc + door + as
+
+
+more: () {
+    if empty
+        showShop(dd)
+    else
+        showShow(door * var)
+    fi
+}
+
+showShop: (shop) {
+    println(shop)
+}
