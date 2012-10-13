@@ -1,13 +1,12 @@
 module Runner (
+    Failable,
     Runtime,
     Value,
     updateInput,
     getInput,
-    printVal,
-    printStr,
     newRuntime,
-    evalExpr,
     evalStmt,
+    showStr,
 ) where
 
 import Control.Monad (liftM, liftM2)
@@ -22,23 +21,38 @@ data Value = Vi Integer
            
 type Scope   = Map.Map String Value
 type Runtime = (Scope, String)
+           
+type Failable = Either String
+                        
+showOnlyErr :: State Runtime [IO ()] -> Failable () -> State Runtime [IO ()]
+showOnlyErr doRest (Right ())   = doRest
+showOnlyErr doRest (Left error) = showStr doRest error
                
-printVal :: Value -> State Runtime [IO ()] -> State Runtime [IO ()]
-printVal (Vi int) doRest = printRaw int doRest
+showVal :: State Runtime [IO ()] -> Value -> State Runtime [IO ()]
+showVal doRest (Vi int) = showRaw doRest int
 
-printRaw :: (Show t) => t -> State Runtime [IO ()] -> State Runtime [IO ()]
-printRaw x doRest = printStr (show x) doRest
+showRaw :: (Show t) => State Runtime [IO ()] -> t -> State Runtime [IO ()]
+showRaw doRest x = showStr doRest (show x)
 
-printStr :: String -> State Runtime [IO ()] -> State Runtime [IO ()]
-printStr msg doRest = doRest >>= return . ((putStrLn msg):)
+showStr :: State Runtime [IO ()] -> String -> State Runtime [IO ()]
+showStr doRest msg = doRest >>= return . ((putStrLn msg):)
 
 newRuntime :: String -> Runtime
 newRuntime input = (Map.empty, input)
 
-evalStmt :: (Error e, MonadError e m) => Stmt -> State Runtime (m ())
-evalStmt (Assn name expr) = evalExpr expr >>= assign name
-    where assign name (Right val)   = setVar name val
-          assign name (Left error)  = return . throwError $ error
+
+evalStmt ::  State Runtime [IO ()] -> Stmt -> State Runtime [IO ()]
+evalStmt doRest (Assn name expr) = evalExpr expr >>= assign doRest name
+evalStmt doRest (Se expr)        = evalExpr expr >>= showValOrErr doRest  
+
+assign :: State Runtime [IO ()] -> String -> Failable Value -> State Runtime [IO ()]
+assign doRest name (Right val)  = setVar name val >>= showOnlyErr doRest
+assign doRest name (Left error) = showStr doRest error
+ 
+showValOrErr :: State Runtime [IO ()] -> Failable Value -> State Runtime [IO ()]
+showValOrErr doRest (Right val)  = showVal doRest val
+showValOrErr doRest (Left error) = showStr doRest error
+
 
 evalExpr :: (Error e, MonadError e m) => Expr -> State Runtime (m Value)
 evalExpr (Et x)     = evalTerm x
@@ -84,7 +98,7 @@ updateInput newInput = state $ \(s, i) -> ((), (s, newInput))
 getVar :: (Error e, MonadError e m) =>  String -> State Runtime (m Value)
 getVar name = state $ \(scope, i) -> (toVal (Map.lookup name scope), (scope, i))
         where toVal (Just val) = return val
-              toVal Nothing    = evalFail $ (show name) ++ " does not exist"
+              toVal Nothing    = evalFail $ "variable " ++ (show name) ++ " does not exist"
 
 setVar :: (Error e, MonadError e m) => String -> Value -> State Runtime (m ())
 setVar name val = state $ \(scope, i) -> (return (), (Map.insert name val scope, i))

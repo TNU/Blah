@@ -21,7 +21,8 @@ data Decl = De Expr
           | Dn Neg
           deriving (Show, Eq)
 
-data Stmt = Assn String Expr
+data Stmt = Se Expr
+          | Assn String Expr
           deriving (Show, Eq)
           
 data Expr = Et Term
@@ -90,6 +91,7 @@ reduce ((Dk (ID id)):rest)      tokens = reduce ((Dn (Nd id)):rest)   tokens
 reduce ((Dn neg):rest)          tokens = reduce ((Df (Fp neg)):rest)  tokens
 reduce ((Df fact):rest)         tokens = reduce ((Dt (Tf fact)):rest) tokens
 reduce ((Dt term):rest)         tokens = reduce ((De (Et term)):rest) tokens
+reduce ((De expr):rest)         tokens = reduce ((Ds (Se expr)):rest) tokens
 
 {- base cases -}
 reduce decls@[_]    []      = return decls
@@ -110,24 +112,24 @@ parseFail = throwError . strMsg . ("<parse> " ++)
 parseStr :: (Error e, MonadError e m) => String -> m [Decl]
 parseStr str = fst (tokenize str) >>= parse []
 
-parseTest = (p "1 + 2" == Right [De (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2))))])
-         && (p "1 * 2" == Right [De (Et (Mult (Tf (Fp (Ni 1))) (Fp (Ni 2))))])
-         && (p "1 + - 2 --2" == Right [De (Sub (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fn (Ni 2)))) (Tf (Fn (Ni 2))))])
+parseTest = (p "1 + 2" == Right [Ds (Se (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2)))))])
+         && (p "1 * 2" == Right [Ds (Se (Et (Mult (Tf (Fp (Ni 1))) (Fp (Ni 2)))))])
+         && (p "1 + - 2 --2" == Right [Ds (Se (Sub (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fn (Ni 2)))) (Tf (Fn (Ni 2)))))])
          && (p "1 + 2 * 3 * -3 - -3 + 4 * 5 / 6" == 
-            Right [De (Add (Sub (Add (Et (Tf (Fp (Ni 1)))) (Mult (Mult (Tf (Fp (Ni 2))) (Fp (Ni 3))) (Fn (Ni 3)))) (Tf (Fn (Ni 3)))) (Div (Mult (Tf (Fp (Ni 4))) (Fp (Ni 5))) (Fp (Ni 6))))])
-         && (p "1 - 2" == Right [De (Sub (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2))))])
-         && (p "- 1" == Right [De (Et (Tf (Fn (Ni 1))))])
-         && (p "-(1 * 1)" == Right [De (Et (Tf (Fn (Np (Pe (Et (Mult (Tf (Fp (Ni 1))) (Fp (Ni 1)))))))))])
-         && (p "-(-(-(-1)))" == Right [De (Et (Tf (Fn (Np (Pe (Et (Tf (Fn (Np (Pe (Et (Tf (Fn (Np (Pe (Et (Tf (Fn (Ni 1)))))))))))))))))))])
-         && (p "-1 * -(2 + 3 * 4)" == Right [De (Et (Mult (Tf (Fn (Ni 1))) (Fn (Np (Pe (Add (Et (Tf (Fp (Ni 2)))) (Mult (Tf (Fp (Ni 3))) (Fp (Ni 4)))))))))])
+            Right [Ds (Se (Add (Sub (Add (Et (Tf (Fp (Ni 1)))) (Mult (Mult (Tf (Fp (Ni 2))) (Fp (Ni 3))) (Fn (Ni 3)))) (Tf (Fn (Ni 3)))) (Div (Mult (Tf (Fp (Ni 4))) (Fp (Ni 5))) (Fp (Ni 6)))))])
+         && (p "1 - 2" == Right [Ds (Se (Sub (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2)))))])
+         && (p "- 1" == Right [Ds (Se (Et (Tf (Fn (Ni 1)))))])
+         && (p "-(1 * 1)" == Right [Ds (Se (Et (Tf (Fn (Np (Pe (Et (Mult (Tf (Fp (Ni 1))) (Fp (Ni 1))))))))))])
+         && (p "-(-(-(-1)))" == Right [Ds (Se (Et (Tf (Fn (Np (Pe (Et (Tf (Fn (Np (Pe (Et (Tf (Fn (Np (Pe (Et (Tf (Fn (Ni 1))))))))))))))))))))])
+         && (p "-1 * -(2 + 3 * 4)" == Right [Ds (Se (Et (Mult (Tf (Fn (Ni 1))) (Fn (Np (Pe (Add (Et (Tf (Fp (Ni 2)))) (Mult (Tf (Fp (Ni 3))) (Fp (Ni 4))))))))))])
          && (p "abc: 1 - 3" == Right [Ds (Assn "abc" (Sub (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 3)))))])
          && (p "abc: def" == Right [Ds (Assn "abc" (Et (Tf (Fp (Nd "def")))))])
          && (p "a: (b - c / 2) * d" == 
             Right [Ds (Assn "a" (Et (Mult (Tf (Fp (Np (Pe (Sub (Et (Tf (Fp (Nd "b")))) (Div (Tf (Fp (Nd "c"))) (Fp (Ni 2)))))))) (Fp (Nd "d")))))])
-         && (p "a\n:" == Right [De (Et (Tf (Fp (Nd "a"))))]) -- not assign
+         && (p "a\n:" == Right [Ds (Se (Et (Tf (Fp (Nd "a")))))]) -- not assign
          
          && (p "1 + - - \n 1" == Left "<parse> [Dk MINUS,Dk MINUS,Dk PLUS,De (Et (Tf (Fp (Ni 1))))] []")
-         && (p "-- 1" == Left "<parse> [De (Et (Tf (Fn (Ni 1)))),Dk MINUS] []")
+         && (p "-- 1" == Left "<parse> [Ds (Se (Et (Tf (Fn (Ni 1))))),Dk MINUS] []")
          && (p "a:" == Left "<parse> [Dk ASSN,Dn (Nd \"a\")] []")
          && (p "a+b: 3" == Left "<parse> [Ds (Assn \"b\" (Et (Tf (Fp (Ni 3))))),Dk PLUS,De (Et (Tf (Fp (Nd \"a\"))))] []")
          where p = parseStr :: String -> Either String [Decl]

@@ -8,9 +8,7 @@ import Control.Monad.State
 
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
-import Runner
-           
-type Failable = Either String           
+import Runner        
            
 repl :: IO ()
 repl = getContents >>= replRun
@@ -22,9 +20,8 @@ replRunRest :: State Runtime [IO ()]
 replRunRest = replRunLine (return [])
 
 replRunLine :: Failable [Decl] -> State Runtime [IO ()]
-replRunLine (Left error)        = replPrint error 
-replRunLine (Right [(De expr)]) = evalExpr expr >>= showValOrErr
-replRunLine (Right [(Ds stmt)]) = evalStmt stmt >>= showOnlyErr
+replRunLine (Left error)        = showRawError error
+replRunLine (Right [(Ds stmt)]) = evalStmt replRunRest stmt 
 replRunLine (Right unmatched)   = do 
         input <- getInput
         case (unmatched, input) of
@@ -34,17 +31,9 @@ replRunLine (Right unmatched)   = do
                             decls = tokens >>= parse unmatched
                         updateInput restInput
                         replRunLine decls
-                        
-showOnlyErr :: Failable () -> State Runtime [IO ()]
-showOnlyErr (Right ())    = replRunRest
-showOnlyErr (Left error)  = printStr error replRunRest
  
-showValOrErr :: Failable Value -> State Runtime [IO ()]
-showValOrErr (Right val) = printVal val replRunRest
-showValOrErr (Left error) = printStr error replRunRest
- 
-replPrint :: String -> State Runtime [IO ()]
-replPrint str = printStr str replRunRest
+showRawError :: String -> State Runtime [IO ()]
+showRawError str = showStr replRunRest str
  
 -- error handling
 replFail :: String -> IO ()
