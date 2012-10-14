@@ -9,8 +9,10 @@ module Parser (
     parse,
 ) where
 
-import Control.Monad.Error
+import Data.Functor.Identity
+import Control.Monad.Trans.Error
 
+import Failure
 import Tokenizer
 
 data Decl = De Expr
@@ -24,7 +26,7 @@ data Decl = De Expr
 data Stmt = Se Expr
           | Assn String Expr
           deriving (Show, Eq)
-          
+
 data Expr = Et Term
           | Add Expr Term
           | Sub Expr Term
@@ -34,7 +36,7 @@ data Term = Tf Factor
           | Mult Term Factor
           | Div Term Factor
           deriving (Show, Eq)
-          
+
 data Factor = Fp Neg
             | Fn Neg
             deriving (Show, Eq)
@@ -47,14 +49,14 @@ data Neg  = Ni Integer
 data Paren = Pe Expr
            deriving (Show, Eq)
 
-parse :: (Error e, MonadError e m) => [Decl] -> [Token] -> m [Decl]
+parse :: [Decl] -> [Token] -> Failable [Decl]
 parse = shift
 
-shift :: (Error e, MonadError e m) => [Decl] -> [Token] -> m [Decl]
-shift decls (tok:tokens)        = reduce ((Dk tok):decls) tokens 
+shift :: [Decl] -> [Token] -> Failable [Decl]
+shift decls (tok:tokens)        = reduce ((Dk tok):decls) tokens
 shift decls []                  = return decls
 
-reduce :: (Error e, MonadError e m) => [Decl] -> [Token] -> m [Decl]
+reduce :: [Decl] -> [Token] -> Failable [Decl]
 
 {- terms -}
 reduce decls@((Dt term):rest) tokens@(tok:_) | isTermOp tok = shift decls tokens
@@ -104,18 +106,14 @@ isTermOp tok        = tok `elem` [MULT, DIV]
 isNegatable ((De _):xs) = False
 isNegatable _           = True
 
--- error handling
-parseFail :: (Error e, MonadError e m) => String -> m a
-parseFail = throwError . strMsg . ("<parse> " ++)
-          
 -- testing
-parseStr :: (Error e, MonadError e m) => String -> m [Decl]
+parseStr :: String -> Failable [Decl]
 parseStr str = fst (tokenize str) >>= parse []
 
 parseTest = (p "1 + 2" == Right [Ds (Se (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2)))))])
          && (p "1 * 2" == Right [Ds (Se (Et (Mult (Tf (Fp (Ni 1))) (Fp (Ni 2)))))])
          && (p "1 + - 2 --2" == Right [Ds (Se (Sub (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fn (Ni 2)))) (Tf (Fn (Ni 2)))))])
-         && (p "1 + 2 * 3 * -3 - -3 + 4 * 5 / 6" == 
+         && (p "1 + 2 * 3 * -3 - -3 + 4 * 5 / 6" ==
             Right [Ds (Se (Add (Sub (Add (Et (Tf (Fp (Ni 1)))) (Mult (Mult (Tf (Fp (Ni 2))) (Fp (Ni 3))) (Fn (Ni 3)))) (Tf (Fn (Ni 3)))) (Div (Mult (Tf (Fp (Ni 4))) (Fp (Ni 5))) (Fp (Ni 6)))))])
          && (p "1 - 2" == Right [Ds (Se (Sub (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2)))))])
          && (p "- 1" == Right [Ds (Se (Et (Tf (Fn (Ni 1)))))])
@@ -124,12 +122,12 @@ parseTest = (p "1 + 2" == Right [Ds (Se (Add (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2
          && (p "-1 * -(2 + 3 * 4)" == Right [Ds (Se (Et (Mult (Tf (Fn (Ni 1))) (Fn (Np (Pe (Add (Et (Tf (Fp (Ni 2)))) (Mult (Tf (Fp (Ni 3))) (Fp (Ni 4))))))))))])
          && (p "abc: 1 - 3" == Right [Ds (Assn "abc" (Sub (Et (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 3)))))])
          && (p "abc: def" == Right [Ds (Assn "abc" (Et (Tf (Fp (Nd "def")))))])
-         && (p "a: (b - c / 2) * d" == 
+         && (p "a: (b - c / 2) * d" ==
             Right [Ds (Assn "a" (Et (Mult (Tf (Fp (Np (Pe (Sub (Et (Tf (Fp (Nd "b")))) (Div (Tf (Fp (Nd "c"))) (Fp (Ni 2)))))))) (Fp (Nd "d")))))])
          && (p "a\n:" == Right [Ds (Se (Et (Tf (Fp (Nd "a")))))]) -- not assign
-         
+
          && (p "1 + - - \n 1" == Left "<parse> [Dk MINUS,Dk MINUS,Dk PLUS,De (Et (Tf (Fp (Ni 1))))] []")
          && (p "-- 1" == Left "<parse> [Ds (Se (Et (Tf (Fn (Ni 1))))),Dk MINUS] []")
          && (p "a:" == Left "<parse> [Dk ASSN,Dn (Nd \"a\")] []")
          && (p "a+b: 3" == Left "<parse> [Ds (Assn \"b\" (Et (Tf (Fp (Ni 3))))),Dk PLUS,De (Et (Tf (Fp (Nd \"a\"))))] []")
-         where p = parseStr :: String -> Either String [Decl]
+         where p = extract . parseStr

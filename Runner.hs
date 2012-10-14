@@ -1,115 +1,106 @@
 module Runner (
-    Failable,
-    Runtime,
+    RuntimeIO,
     Value,
-    updateInput,
-    getInput,
     newRuntime,
+    getInput,
+    updateInput,
     evalStmt,
     showStr,
 ) where
 
-import Control.Monad (liftM, liftM2)
-import Control.Monad.Error
-import Control.Monad.State
+import Control.Monad (liftM2, join)
+import Control.Monad.Trans.State
+import Control.Monad.Trans.Error
+import Data.Functor.Identity
+
 import qualified Data.Map as Map
 
+import Failure
 import Parser
 
 data Value = Vi Integer
            deriving (Show)
-           
-type Scope   = Map.Map String Value
-type Runtime = (Scope, String)
-           
-type Failable = Either String
-                        
-showOnlyErr :: State Runtime [IO ()] -> Failable () -> State Runtime [IO ()]
-showOnlyErr doRest (Right ())   = doRest
-showOnlyErr doRest (Left error) = showStr doRest error
-               
-showVal :: State Runtime [IO ()] -> Value -> State Runtime [IO ()]
-showVal doRest (Vi int) = showRaw doRest int
 
-showRaw :: (Show t) => State Runtime [IO ()] -> t -> State Runtime [IO ()]
-showRaw doRest x = showStr doRest (show x)
+type Scope           = Map.Map String Value
+type RuntimeState    = State (Scope, String)
+type RuntimeIO a     = RuntimeState (IO a)
+type RuntimeFailable = FailableM RuntimeState
 
-showStr :: State Runtime [IO ()] -> String -> State Runtime [IO ()]
-showStr doRest msg = doRest >>= return . ((putStrLn msg):)
 
-newRuntime :: String -> Runtime
+newRuntime :: String -> (Scope, String)
 newRuntime input = (Map.empty, input)
 
-
-evalStmt ::  State Runtime [IO ()] -> Stmt -> State Runtime [IO ()]
-evalStmt doRest (Assn name expr) = evalExpr expr >>= assign doRest name
-evalStmt doRest (Se expr)        = evalExpr expr >>= showValOrErr doRest  
-
-assign :: State Runtime [IO ()] -> String -> Failable Value -> State Runtime [IO ()]
-assign doRest name (Right val)  = setVar name val >>= showOnlyErr doRest
-assign doRest name (Left error) = showStr doRest error
- 
-showValOrErr :: State Runtime [IO ()] -> Failable Value -> State Runtime [IO ()]
+showValOrErr :: RuntimeIO a -> Either Failure Value -> RuntimeIO a
 showValOrErr doRest (Right val)  = showVal doRest val
 showValOrErr doRest (Left error) = showStr doRest error
 
+showOnlyErr :: RuntimeIO a -> Either Failure () -> RuntimeIO a
+showOnlyErr doRest (Right ())   = doRest
+showOnlyErr doRest (Left error) = showStr doRest error
 
-evalExpr :: (Error e, MonadError e m) => Expr -> State Runtime (m Value)
+showVal :: RuntimeIO a -> Value -> RuntimeIO a
+showVal doRest (Vi int) = showRaw doRest int
+
+showRaw :: (Show t) => RuntimeIO a -> t -> RuntimeIO a
+showRaw doRest x = showStr doRest (show x)
+
+showStr :: RuntimeIO a -> String -> RuntimeIO a
+showStr doRest msg = doRest >>= return . (putStrLn msg >>)
+
+evalStmt ::  RuntimeIO a -> Stmt -> RuntimeIO a
+evalStmt doRest (Assn name expr) = runErrorT (evalExpr expr) >>= assign doRest name
+evalStmt doRest (Se expr) = runErrorT (evalExpr expr) >>= showValOrErr doRest
+
+assign :: RuntimeIO a -> String -> Either Failure Value -> RuntimeIO a
+assign doRest name (Right val)  = runErrorT (setVar name val) >>= showOnlyErr doRest
+assign doRest name (Left error) = showStr doRest error
+
+
+evalExpr :: Expr -> RuntimeFailable Value
 evalExpr (Et x)     = evalTerm x
 evalExpr (Add x y)  = applyBinOp add (evalExpr x) (evalTerm y)
     where add (Vi x) (Vi y) = return . Vi $ (x + y)
 evalExpr (Sub x y)  = applyBinOp sub (evalExpr x) (evalTerm y)
     where sub (Vi x) (Vi y) = return . Vi $ (x - y)
 
-evalTerm :: (Error e, MonadError e m) => Term -> State Runtime (m Value)
+evalTerm :: Term -> RuntimeFailable Value
 evalTerm (Tf x) = evalFact x
 evalTerm (Mult x y) = applyBinOp mult (evalTerm x) (evalFact y)
     where mult (Vi x) (Vi y) = return . Vi $ (x * y)
 evalTerm (Div x y) = applyBinOp divide (evalTerm x) (evalFact y)
-    where divide (Vi x) (Vi 0) = evalFail $ "divide by zero"
+    where divide (Vi x) (Vi 0) = throwError . evalError $ "divide by zero"
           divide (Vi x) (Vi y) = return . Vi $ (x `div` y)
-    
-evalFact :: (Error e, MonadError e m) => Factor -> State Runtime (m Value)
+
+evalFact :: Factor -> RuntimeFailable Value
 evalFact (Fp x) = evalNeg x
-evalFact (Fn x) = applyOp negateVal (evalNeg x)
+evalFact (Fn x) = (evalNeg x) >>= negateVal
    where negateVal (Vi x) = return . Vi . negate $ x
 
-evalNeg :: (Error e, MonadError e m) => Neg -> State Runtime (m Value)
-evalNeg (Ni x) = returnVal . Vi $ x
+evalNeg :: Neg -> RuntimeFailable Value
+evalNeg (Ni x) = return . Vi $ x
 evalNeg (Nd x) = getVar x
 evalNeg (Np x) = evalParen x
 
-evalParen :: (Error e, MonadError e m) => Paren -> State Runtime (m Value)
+evalParen :: Paren -> RuntimeFailable Value
 evalParen (Pe x) = evalExpr x
 
-returnVal :: (Error e, MonadError e m) => Value -> State Runtime (m Value)
-returnVal = return . return
 
-evalFail :: (Error e, MonadError e m) => String -> m a
-evalFail = throwError . strMsg . ("<eval> " ++)
-
-
-getInput :: State Runtime String
+getInput :: RuntimeState String
 getInput = state $ \(s, i) -> (i, (s, i))
 
-updateInput :: String -> State Runtime ()
+updateInput :: String -> RuntimeState ()
 updateInput newInput = state $ \(s, i) -> ((), (s, newInput))
 
-getVar :: (Error e, MonadError e m) =>  String -> State Runtime (m Value)
-getVar name = state $ \(scope, i) -> (toVal (Map.lookup name scope), (scope, i))
-        where toVal (Just val) = return val
-              toVal Nothing    = evalFail $ "variable " ++ (show name) ++ " does not exist"
+getVar ::  String -> RuntimeFailable Value
+getVar name = ErrorT . state $ action
+        where action (scope, i) = (toVal (Map.lookup name scope), (scope, i))
+              toVal (Just val)  = Right val
+              toVal Nothing     = Left . evalError $ "variable " ++ (show name) ++ " does not exist"
 
-setVar :: (Error e, MonadError e m) => String -> Value -> State Runtime (m ())
-setVar name val = state $ \(scope, i) -> (return (), (Map.insert name val scope, i))
+setVar :: String -> Value -> RuntimeFailable ()
+setVar name val = ErrorT . state $ action
+        where action (scope, i) = (return (), (Map.insert name val scope, i))
 
 
--- apply unary operation to a state return value
-applyOp :: (Error e, MonadError e m, Monad s) => 
-                (a -> m a) -> s (m a) -> s (m a)
-applyOp op x = liftM (>>= op) x 
-
--- apply binary operation to two state return values
-applyBinOp :: (Error e, MonadError e m, Monad s) => 
-                (a -> a -> m a) -> s (m a) -> s (m a) -> s (m a)
-applyBinOp op a b = liftM2 (\c d -> c >>= (d >>=) . op) a b
+applyBinOp :: (Monad m) => (a -> a -> m a) -> m a -> m a -> m a
+applyBinOp binOp a b = join (liftM2 binOp a b)

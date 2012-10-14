@@ -3,38 +3,35 @@ module Coder (
 ) where
 
 import Control.Monad (liftM2)
-import Control.Monad.Error
-import Control.Monad.State
+import Control.Monad.Trans.Error
+import Control.Monad.Trans.State
 
+import Failure
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
-import Runner        
-           
+import Runner
+
 repl :: IO ()
 repl = getContents >>= replRun
 
 replRun :: String -> IO ()
-replRun input = sequence_ $ evalState replRunRest (newRuntime input)
+replRun input = evalState replRunRest (newRuntime input)
 
-replRunRest :: State Runtime [IO ()]
+replRunRest :: RuntimeIO ()
 replRunRest = replRunLine (return [])
 
-replRunLine :: Failable [Decl] -> State Runtime [IO ()]
+replRunLine :: Either Failure [Decl] -> RuntimeIO ()
 replRunLine (Left error)        = showRawError error
-replRunLine (Right [(Ds stmt)]) = evalStmt replRunRest stmt 
-replRunLine (Right unmatched)   = do 
+replRunLine (Right [(Ds stmt)]) = evalStmt replRunRest stmt
+replRunLine (Right unmatched)   = do
         input <- getInput
         case (unmatched, input) of
-            ([], []) -> return []
-            (xs, []) -> return [replFail "unmatched decls at end of input"]
+            ([], []) -> return . return $ ()
+            (xs, []) -> return . replError $ "unmatched decls at end of input"
             _     -> do let (tokens, restInput) = tokenize input
                             decls = tokens >>= parse unmatched
                         updateInput restInput
-                        replRunLine decls
- 
-showRawError :: String -> State Runtime [IO ()]
+                        replRunLine (extract decls)
+
+showRawError :: String -> RuntimeIO ()
 showRawError str = showStr replRunRest str
- 
--- error handling
-replFail :: String -> IO ()
-replFail = putStrLn . ("<repl> " ++)
