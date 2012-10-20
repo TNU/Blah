@@ -20,7 +20,7 @@ import Parser
 
 data Value = Vi Integer
            | Vb Bool
-           deriving (Show)
+           deriving (Show, Eq)
 
 type Scope           = Map.Map String Value
 type RuntimeState    = State (Scope, String)
@@ -42,7 +42,7 @@ showOnlyErr doRest (Left error) = showStr doRest error
 
 showVal :: RuntimeIO a -> Value -> RuntimeIO a
 showVal doRest (Vi int)  = showRaw doRest int
-showVal doRest (Vb bool) = showRaw doRest bool 
+showVal doRest (Vb bool) = showRaw doRest bool
 
 showRaw :: (Show t) => RuntimeIO a -> t -> RuntimeIO a
 showRaw doRest x = showStr doRest (show x)
@@ -72,44 +72,63 @@ evalAndOp :: AndOp -> RuntimeFailable (Bool, Value)
 evalAndOp (Ac x)    = evalComp x >>= toAndOp
 evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
     where doAnd a@(t,_) b = if t then toAndOp b else return a
-    
+
 toAndOp :: (Bool, Value, Value) -> RuntimeFailable (Bool, Value)
 toAndOp (b, x, _)   = return (b, x)
-          
+
 evalComp :: Comp -> RuntimeFailable (Bool, Value, Value)
 evalComp (Ca x)     = evalArth x >>= toComp
-evalComp (Lt x y)   = applyBinOp (compOp (<))  (evalComp x) (evalArth y)
-evalComp (Eq x y)   = applyBinOp (compOp (==)) (evalComp x) (evalArth y)
-evalComp (Gt x y)   = applyBinOp (compOp (>))  (evalComp x) (evalArth y)
-evalComp (Lte x y)  = applyBinOp (compOp (<=)) (evalComp x) (evalArth y)
-evalComp (Gte x y)  = applyBinOp (compOp (>=)) (evalComp x) (evalArth y)
-evalComp (Ne x y)   = applyBinOp (compOp (/=)) (evalComp x) (evalArth y) 
+evalComp (Lt x y)   = doComp ltOp (evalComp x) (evalArth y)
+evalComp (Eq x y)   = doComp eqOp (evalComp x) (evalArth y)
+evalComp (Gt x y)   = doComp gtOp (evalComp x) (evalArth y)
+    where gtOp      = flip ltOp
+evalComp (Lte x y)  = doComp lteOp(evalComp x) (evalArth y)
+    where lteOp x y = ltOp y x >>= return . not
+evalComp (Gte x y)  = doComp gteOp (evalComp x) (evalArth y)
+    where gteOp x y = ltOp x y >>= return . not
+evalComp (Ne x y)   = doComp neOp (evalComp x) (evalArth y)
+    where neOp x y  = eqOp x y >>= return . not
 
 toComp :: Value -> RuntimeFailable (Bool, Value, Value)
 toComp x@(Vi 0) = return (False, x, x)
 toComp x@(Vi _) = return (True,  x, x)
 toComp x@(Vb y) = return (y,     x, x)
 
-compOp :: (Integer -> Integer -> Bool) -> (Bool, Value, Value) -> Value 
-        -> RuntimeFailable (Bool, Value, Value)
-compOp op (old, _, Vi x) (Vi y) = return (new, Vb new, Vi y)
-    where result = x `op` y
-          new = old && result
+doComp :: (Value -> Value -> RuntimeFailable Bool)
+                                    -> RuntimeFailable (Bool, Value, Value)
+                                    -> RuntimeFailable Value
+                                    -> RuntimeFailable (Bool, Value, Value)
+doComp op a b = do (old, _, x)  <- a
+                   y            <- b
+                   result       <- x `op` y
+                   let new = result && old
+                   return (new, Vb new, y)
+
+ltOp :: Value -> Value -> RuntimeFailable Bool
+ltOp (Vi x) (Vi y)  = return (x < y)
+ltOp x      y       = typeFail "comparison" x y
+
+eqOp :: Value -> Value -> RuntimeFailable Bool
+eqOp x y = return (x == y)
 
 evalArth :: Arth -> RuntimeFailable Value
 evalArth (At x)     = evalTerm x
 evalArth (Add x y)  = applyBinOp add (evalArth x) (evalTerm y)
     where add (Vi x) (Vi y) = return . Vi $ (x + y)
+          add x      y      = typeFail "addition" x y
 evalArth (Sub x y)  = applyBinOp sub (evalArth x) (evalTerm y)
     where sub (Vi x) (Vi y) = return . Vi $ (x - y)
+          sub x      y      = typeFail "subtraction" x y
 
 evalTerm :: Term -> RuntimeFailable Value
 evalTerm (Tf x) = evalFact x
 evalTerm (Mult x y) = applyBinOp mult (evalTerm x) (evalFact y)
     where mult (Vi x) (Vi y) = return . Vi $ (x * y)
+          mult x      y      = typeFail "multiplication" x y
 evalTerm (Div x y) = applyBinOp divide (evalTerm x) (evalFact y)
-    where divide (Vi x) (Vi 0) = evalFail $ "divide by zero"
+    where divide (Vi x) (Vi 0) = evalFail "divide by zero"
           divide (Vi x) (Vi y) = return . Vi $ (x `div` y)
+          divide x      y      = typeFail "division" x y
 
 evalFact :: Factor -> RuntimeFailable Value
 evalFact (Fb x) = return . Vb $ x
@@ -145,3 +164,9 @@ setVar name val = ErrorT . state $ action
 {- Utility Functions -}
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
 applyBinOp binOp a b = join (liftM2 binOp a b)
+
+typeFail :: String -> Value -> Value -> RuntimeFailable a
+typeFail opName x y = evalFail $ opName ++ " of \""
+                              ++ (show x) ++ "\" and \"" ++ (show y) ++ "\" "
+                              ++ "is not supported"
+
