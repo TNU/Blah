@@ -5,6 +5,7 @@ module Failure (
     tokenizeFail,
     parseFail,
     evalError,
+    evalFail,
     replError,
     extract,
 ) where
@@ -24,6 +25,9 @@ parseFail = throwError . strMsg . ("<parse> " ++)
 
 evalError :: (Error e) => String -> e
 evalError = strMsg . ("<eval> " ++)
+
+evalFail :: (Monad m) => String -> FailableM m a
+evalFail = throwError . evalError
 
 replError:: String -> IO ()
 replError = putStrLn . ("<repl> " ++)
