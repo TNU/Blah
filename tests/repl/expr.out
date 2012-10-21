@@ -1,0 +1,18 @@
+<tokenize> umatched token '~'
+<parse> [Dk MULT] [INT 5]
+<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fn (Ni 5)))))))),Dk MINUS,Dk PLUS,Da (At (Tf (Fp (Ni 3))))] []
+<eval> multiplication of "Vi 51" and "Vb True" is not supported
+<eval> multiplication of "Vi 51" and "Vb True" is not supported
+<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fb False))))))),Dk MINUS] []
+<eval> negation of "Vb False" is not supported
+<parse> [Dk MINUS] []
+3
+<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fp (Ni 5))))))))] [RPAREN]
+<eval> divide by zero
+<parse> [Dk ASSN,Dn (Nd "a")] []
+12
+<eval> variable "b" does not exist
+<parse> [Dk ASSN] [INT 3]
+<eval> variable "ad" does not exist
+<parse> [Ds (Assn "b" (Oa (Ac (Ca (At (Tf (Fp (Nd "e")))))))),Dk ASSN,Dn (Nd "a")] []
+<parse> [Ds (Assn "b" (Oa (Ac (Ca (At (Tf (Fp (Ni 7)))))))),Dk PLUS,Da (At (Tf (Fp (Nd "a"))))] []

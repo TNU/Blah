@@ -1,7 +1,0 @@
-<tokenize> umatched token '~'
-<parse> [Dk MULT] [INT 5]
-<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fn (Ni 5)))))))),Dk MINUS,Dk PLUS,Da (At (Tf (Fp (Ni 3))))] []
-<parse> [Dk MINUS] []
-3
-<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fp (Ni 5))))))))] [RPAREN]
-<eval> divide by zero
