@@ -74,7 +74,8 @@ data Paren = Po OrOp
            deriving (Show, Eq)
 
 parse :: [Decl] -> [Token] -> Failable [Decl]
-parse = shift
+parse []    = shift []
+parse decls = reduce (demoteLast decls)
 
 shift :: [Decl] -> [Token] -> Failable [Decl]
 shift decls (tok:tokens)        = reduce ((Dk tok):decls) tokens
@@ -158,37 +159,23 @@ reduce ((Dd andop):rest)     tokens = reduce ((Do (Oa andop)):rest) tokens
 reduce ((Do orop):rest)      tokens = reduce ((Ds (So orop)):rest)  tokens
 
 {- base cases -}
-reduce decls@[_]    []      = return decls
+reduce decls@[Ds _] []      = return decls
 reduce decls        tokens  = parseFail $ (show decls) ++ " " ++ (show tokens)
+
+{- demotions -}
+demoteLast :: [Decl] -> [Decl]
+demoteLast (x:xs)  = (demote x):xs
+demoteLast []      = []
+
+demote :: Decl -> Decl
+demote (Ds (So orop))  = demote (Do orop)
+demote (Do (Oa andop)) = demote (Dd andop)
+demote (Dd (Ac comp))  = demote (Dc comp)
+demote (Dc (Ca arth))  = demote (Da arth)
+demote (Da (At term))  = demote (Dt term)
+demote (Dt (Tf fact))  = demote (Df fact)
+demote x               = x
 
 -- testing
 parseStr :: String -> Either Failure [Decl]
 parseStr str = extract (fst (tokenize str) >>= parse [])
-
-parseTest = (p "1 + 2"  == Right [Ds (So (Oa (Ac (Ca (Add (At (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2))))))))])
-         && (p "1 * 2"  == Right [Ds (So (Oa (Ac (Ca (At (Mult (Tf (Fp (Ni 1))) (Fp (Ni 2))))))))])
-         && (p "1 + - 2 --2" == Right [Ds (So (Oa (Ac (Ca (Sub (Add (At (Tf (Fp (Ni 1)))) (Tf (Fn (Ni 2)))) (Tf (Fn (Ni 2))))))))])
-         && (p "1 + 2 * 3 * -3 - -3 + 4 * 5 / 6" ==
-            Right [Ds (So (Oa (Ac (Ca (Add (Sub (Add (At (Tf (Fp (Ni 1)))) (Mult (Mult (Tf (Fp (Ni 2))) (Fp (Ni 3))) (Fn (Ni 3)))) (Tf (Fn (Ni 3)))) (Div (Mult (Tf (Fp (Ni 4))) (Fp (Ni 5))) (Fp (Ni 6))))))))])
-         && (p "1 - 2"    == Right [Ds (So (Oa (Ac (Ca (Sub (At (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 2))))))))])
-         && (p "- 1"      == Right [Ds (So (Oa (Ac (Ca (At (Tf (Fn (Ni 1))))))))])
-         && (p "-(1 * 1)" == Right [Ds (So (Oa (Ac (Ca (At (Tf (Fn (Np (Po (Oa (Ac (Ca (At (Mult (Tf (Fp (Ni 1))) (Fp (Ni 1))))))))))))))))])
-         && (p "-(-(-(-1)))" == Right [Ds (So (Oa (Ac (Ca (At (Tf (Fn (Np (Po (Oa (Ac (Ca (At (Tf (Fn (Np (Po (Oa (Ac (Ca (At (Tf (Fn (Np (Po (Oa (Ac (Ca (At (Tf (Fn (Ni 1))))))))))))))))))))))))))))))))])
-         && (p "-1 * -(2 + 3 * 4)" == Right [Ds (So (Oa (Ac (Ca (At (Mult (Tf (Fn (Ni 1))) (Fn (Np (Po (Oa (Ac (Ca (Add (At (Tf (Fp (Ni 2)))) (Mult (Tf (Fp (Ni 3))) (Fp (Ni 4))))))))))))))))])
-         && (p "abc: 1 - 3" == Right [Ds (Assn "abc" (Oa (Ac (Ca (Sub (At (Tf (Fp (Ni 1)))) (Tf (Fp (Ni 3))))))))])
-         && (p "abc: def" == Right [Ds (Assn "abc" (Oa (Ac (Ca (At (Tf (Fp (Nd "def"))))))))])
-         && (p "a: (b - c / 2) * d" == Right [Ds (Assn "a" (Oa (Ac (Ca (At (Mult (Tf (Fp (Np (Po (Oa (Ac (Ca (Sub (At (Tf (Fp (Nd "b")))) (Div (Tf (Fp (Nd "c"))) (Fp (Ni 2))))))))))) (Fp (Nd "d"))))))))])
-         && (p "a\n:" == Right [Ds (So (Oa (Ac (Ca (At (Tf (Fp (Nd "a"))))))))]) -- not assign
-         && (p "a or b and (c or d)" == Right [Ds (So (Or (Oa (Ac (Ca (At (Tf (Fp (Nd "a"))))))) (And (Ac (Ca (At (Tf (Fp (Nd "b")))))) (Ca (At (Tf (Fp (Np (Po (Or (Oa (Ac (Ca (At (Tf (Fp (Nd "c"))))))) (Ac (Ca (At (Tf (Fp (Nd "d"))))))))))))))))])
-         && (p "a = b > c * d <= e or f" == Right [Ds (So (Or (Oa (Ac (Lte (Gt (Eq (Ca (At (Tf (Fp (Nd "a"))))) (At (Tf (Fp (Nd "b"))))) (At (Mult (Tf (Fp (Nd "c"))) (Fp (Nd "d"))))) (At (Tf (Fp (Nd "e"))))))) (Ac (Ca (At (Tf (Fp (Nd "f"))))))))])
-         && (p "a = b > c * d <= e or f" == Right [Ds (So (Or (Oa (Ac (Lte (Gt (Eq (Ca (At (Tf (Fp (Nd "a"))))) (At (Tf (Fp (Nd "b"))))) (At (Mult (Tf (Fp (Nd "c"))) (Fp (Nd "d"))))) (At (Tf (Fp (Nd "e"))))))) (Ac (Ca (At (Tf (Fp (Nd "f"))))))))])
-         && (p "(a >= b or c < d) != (3 and true)" ==
-             Right [Ds (So (Oa (Ac (Ne (Ca (At (Tf (Fp (Np (Po (Or (Oa (Ac (Gte (Ca (At (Tf (Fp (Nd "a"))))) (At (Tf (Fp (Nd "b"))))))) (Ac (Lt (Ca (At (Tf (Fp (Nd "c"))))) (At (Tf (Fp (Nd "d"))))))))))))) (At (Tf (Fp (Np (Po (Oa (And (Ac (Ca (At (Tf (Fp (Ni 3)))))) (Ca (At (Tf (Fb True)))))))))))))))])
-         
-         && (p "1 + - - \n 1" == Left "<parse> [Dk MINUS,Dk MINUS,Dk PLUS,Da (At (Tf (Fp (Ni 1))))] []")
-         && (p "-- 1" == Left "<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fn (Ni 1)))))))),Dk MINUS] []")
-         && (p "a:" == Left "<parse> [Dk ASSN,Dn (Nd \"a\")] []")
-         && (p "a+b: 3" == Left "<parse> [Ds (Assn \"b\" (Oa (Ac (Ca (At (Tf (Fp (Ni 3)))))))),Dk PLUS,Da (At (Tf (Fp (Nd \"a\"))))] []")
-         && (p "-true" == Left "<parse> [Ds (So (Oa (Ac (Ca (At (Tf (Fb True))))))),Dk MINUS] []")
-         where  p = parseStr
-                

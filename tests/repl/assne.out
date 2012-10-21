@@ -1,0 +1,5 @@
+<parse> [Dk ASSN,Dn (Nd "a")] []
+12
+<eval> variable "b" does not exist
+<parse> [Dk ASSN] [INT 3]
+<eval> variable "ad" does not exist

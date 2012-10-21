@@ -13,10 +13,10 @@ data Token = INT Integer
            | TRUE | FALSE
 
            | PLUS | MINUS | MULT | DIV
-           
+
            | TLT | TEQ | TGT
            | TLTE | TGTE | TNE
-           
+
            | AND | OR
 
            | ASSN
@@ -32,12 +32,12 @@ isLetter x  = x `elem` (['a'..'z'] ++ ['A'..'Z'])
 
 keywords :: Map.Map String Token
 keywords = Map.fromList [
-        ("true", TRUE), 
-        ("false", FALSE),
-        ("and", AND),   
+        ("True", TRUE),
+        ("False", FALSE),
+        ("and", AND),
         ("or", OR),
-        ("if", IF),     
-        ("else", ELSE),     
+        ("if", IF),
+        ("else", ELSE),
         ("fi", FI)
     ]
 
@@ -70,8 +70,8 @@ getOneToken str@(x:xs)
     | isNum x        = getNum str
     | isLetter x     = getIdOrKeyword $ str
     | otherwise      = (tokenizeFail $ "umatched token " ++ (show x), xs)
-    where getIdOrKeyword = filterKeyword . getId    
-        
+    where getIdOrKeyword = filterKeyword . getId
+
 getNum :: String -> (Failable Token, String)
 getNum str = (return (INT (read numStr)), rest)
              where (numStr, rest) = span isNum str
