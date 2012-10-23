@@ -1,4 +1,5 @@
 module Parser (
+    Line(..),
     Stmt(..),
     Decl(..),
     OrOp(..),
@@ -18,7 +19,8 @@ import Control.Monad.Trans.Error
 import Failure
 import Tokenizer
 
-data Decl = Ds Stmt
+data Decl = Dl Line
+          | Ds Stmt
           | Do OrOp
           | Dd AndOp
           | Dc Comp
@@ -28,8 +30,12 @@ data Decl = Ds Stmt
           | Dk Token
           | Dn Neg
           deriving (Show, Eq)
+          
+data Line = Ls Stmt
+          | Lm Line Stmt
+          deriving (Show, Eq)
 
-data Stmt = So OrOp
+data Stmt = Se OrOp
           | Assn String OrOp
           deriving (Show, Eq)
 
@@ -139,6 +145,11 @@ reduce decls@((Dn (Nd id)):rest)       tokens@(ASSN:_) = shift decls tokens
 reduce decls@((Dk ASSN):(Dn (Nd id)):rs)  tokens@(_:_) = shift decls tokens
 reduce ((Do orop):(Dk ASSN):(Dn (Nd name)):rs)  tokens = reduce ((Ds (Assn name orop)):rs) tokens
 
+{- lines -}
+reduce decls@((Dl line):rest)          tokens@(COMMA:_) = shift decls tokens
+reduce decls@((Dk COMMA):(Dl line):rest)         tokens = shift decls tokens
+reduce decls@((Ds stmt):(Dk COMMA):(Dl line):rs) tokens = reduce ((Dl (Lm line stmt)):rs) tokens
+
 {- negation -}  -- negation not allowed across lines
 reduce decls@((Dk MINUS):rest) tokens@(tok:_) = shift decls tokens
 reduce ((Dn neg):(Dk MINUS):rest) tokens | negatable rest = reduce (Df (Fn neg):rest) tokens
@@ -156,10 +167,11 @@ reduce ((Dt term):rest)      tokens = reduce ((Da (At term)):rest)  tokens
 reduce ((Da arth):rest)      tokens = reduce ((Dc (Ca arth)):rest)  tokens
 reduce ((Dc comp):rest)      tokens = reduce ((Dd (Ac comp)):rest)  tokens
 reduce ((Dd andop):rest)     tokens = reduce ((Do (Oa andop)):rest) tokens
-reduce ((Do orop):rest)      tokens = reduce ((Ds (So orop)):rest)  tokens
+reduce ((Do orop):rest)      tokens = reduce ((Ds (Se orop)):rest)  tokens
+reduce ((Ds stmt):rest)      tokens = reduce ((Dl (Ls stmt)):rest)  tokens
 
 {- base cases -}
-reduce decls@[Ds _] []      = return decls
+reduce decls@[Dl _] []      = return decls
 reduce decls        tokens  = parseFail $ (show decls) ++ " " ++ (show tokens)
 
 {- demotions -}
@@ -168,7 +180,7 @@ demoteLast (x:xs)  = (demote x):xs
 demoteLast []      = []
 
 demote :: Decl -> Decl
-demote (Ds (So orop))  = demote (Do orop)
+demote (Ds (Se orop))  = demote (Do orop)
 demote (Do (Oa andop)) = demote (Dd andop)
 demote (Dd (Ac comp))  = demote (Dc comp)
 demote (Dc (Ca arth))  = demote (Da arth)

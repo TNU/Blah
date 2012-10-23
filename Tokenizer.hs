@@ -11,18 +11,14 @@ import Failure
 data Token = INT Integer
            | ID String
            | TRUE | FALSE
-
            | PLUS | MINUS | MULT | DIV
-
            | TLT | TEQ | TGT
            | TLTE | TGTE | TNE
-
            | AND | OR
-
            | ASSN
            | IF | ELSE | FI
-
            | LPAREN | RPAREN
+           | COMMA
            deriving (Show, Eq)
 
 isNewline x = x `elem` "\n\r"
@@ -52,19 +48,20 @@ tokenize str = (curTokens, restLines)
               curTokens = liftM2 (:) token restToks
 
 getOneToken :: String -> (Failable Token, String)
-getOneToken ('+':xs)        = (return PLUS,    xs)
-getOneToken ('-':xs)        = (return MINUS,   xs)
-getOneToken ('*':xs)        = (return MULT,    xs)
-getOneToken ('/':xs)        = (return DIV,     xs)
-getOneToken ('(':xs)        = (return LPAREN,  xs)
-getOneToken (')':xs)        = (return RPAREN,  xs)
-getOneToken (':':xs)        = (return ASSN,    xs)
-getOneToken ('<':'=':xs)    = (return TLTE,     xs)
-getOneToken ('>':'=':xs)    = (return TGTE,     xs)
-getOneToken ('!':'=':xs)    = (return TNE,     xs)
-getOneToken ('<':xs)        = (return TLT,     xs)
-getOneToken ('=':xs)        = (return TEQ,     xs)
-getOneToken ('>':xs)        = (return TGT,     xs)
+getOneToken ('+':xs)        = (return PLUS,   xs)
+getOneToken ('-':xs)        = (return MINUS,  xs)
+getOneToken ('*':xs)        = (return MULT,   xs)
+getOneToken ('/':xs)        = (return DIV,    xs)
+getOneToken ('(':xs)        = (return LPAREN, xs)
+getOneToken (')':xs)        = (return RPAREN, xs)
+getOneToken (':':xs)        = (return ASSN,   xs)
+getOneToken ('<':'=':xs)    = (return TLTE,   xs)
+getOneToken ('>':'=':xs)    = (return TGTE,   xs)
+getOneToken ('!':'=':xs)    = (return TNE,    xs)
+getOneToken ('<':xs)        = (return TLT,    xs)
+getOneToken ('=':xs)        = (return TEQ,    xs)
+getOneToken ('>':xs)        = (return TGT,    xs)
+getOneToken (',':xs)        = (return COMMA,  xs)
 
 getOneToken str@(x:xs)
     | isNum x        = getNum str

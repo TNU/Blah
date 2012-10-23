@@ -12,11 +12,15 @@ shortCircuit: (0 and 1 or 4 and 5) == 5
 concat: "the" # " value of " # varName # " is " # 13 * 34 # 14.23 " ."
 comment: "the" ++ "value of " ++ varName ++ "is " ++ 12 - 243 ++ 12
 more: () {
-    if empty
+    if empty then
         showShop(dd)
     else
         showShow(door * var)
     fi
+
+    while i < 7 do
+        print i
+    done
 }
 
 showShop: (shop) {

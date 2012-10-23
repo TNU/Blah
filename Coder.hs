@@ -8,7 +8,7 @@ import Control.Monad.Trans.State
 
 import Failure
 import Tokenizer (tokenize)
-import Parser (parse, Decl(..))
+import Parser (parse, Decl(..), Line(..), Stmt(..))
 import Runner
 
 repl :: IO ()
@@ -22,7 +22,7 @@ replRunRest = replRunLine (return [])
 
 replRunLine :: Either Failure [Decl] -> RuntimeIO ()
 replRunLine (Left error)        = showRawError error
-replRunLine (Right [(Ds stmt)]) = evalStmt replRunRest stmt
+replRunLine (Right [(Dl line)]) = replLine replRunRest line
 replRunLine (Right unmatched)   = do
         input <- getInput
         case (unmatched, input) of
@@ -32,6 +32,18 @@ replRunLine (Right unmatched)   = do
                             decls = tokens >>= parse unmatched
                         updateInput restInput
                         replRunLine (extract decls)
+
+replLine :: RuntimeIO () -> Line -> RuntimeIO ()
+replLine doRest (Ls stmt)       = replStmt doRest stmt
+replLine doRest (Lm line stmt)  = replLine (replStmt doRest stmt) line
+
+replStmt :: RuntimeIO () -> Stmt -> RuntimeIO ()
+replStmt doRest (Assn name expr) = runExpr expr >>= replAssign doRest name
+replStmt doRest (Se expr) = runExpr expr >>= showValOrErr doRest
+
+replAssign :: RuntimeIO () -> String -> Either Failure Value -> RuntimeIO ()
+replAssign doRest name (Right val)  = runErrorT (setVar name val) >>= showOnlyErr doRest
+replAssign doRest name (Left error) = showStr doRest error
 
 showRawError :: String -> RuntimeIO ()
 showRawError str = showStr replRunRest str

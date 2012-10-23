@@ -2,9 +2,15 @@ module Runner (
     RuntimeIO,
     Value,
     newRuntime,
+    runExpr,
+    setVar,
+    getVar,
     getInput,
     updateInput,
-    evalStmt,
+    showValOrErr,
+    showOnlyErr,
+    showVal,
+    showRaw,
     showStr,
 ) where
 
@@ -27,6 +33,7 @@ type RuntimeState    = State (Scope, String)
 type RuntimeIO a     = RuntimeState (IO a)
 type RuntimeFailable = FailableM RuntimeState
 
+type Expr = OrOp
 
 newRuntime :: String -> (Scope, String)
 newRuntime input = (Map.empty, input)
@@ -50,24 +57,17 @@ showRaw doRest x = showStr doRest (show x)
 showStr :: RuntimeIO a -> String -> RuntimeIO a
 showStr doRest msg = doRest >>= return . (putStrLn msg >>)
 
-{- Eval -}
-evalStmt ::  RuntimeIO a -> Stmt -> RuntimeIO a
-evalStmt doRest (Assn name orop) = extractVal (evalOrop orop) >>= assign doRest name
-evalStmt doRest (So orop) = extractVal (evalOrop orop) >>= showValOrErr doRest
+{- Expr -}
+runExpr :: Expr -> RuntimeState (Either Failure Value)
+runExpr expr = runErrorT (evalOrop expr) >>= return . liftM snd
 
-extractVal :: RuntimeFailable (Bool, Value) -> RuntimeState (Either Failure Value)
-extractVal orop = runErrorT orop >>= return . liftM snd
-
-assign :: RuntimeIO a -> String -> Either Failure Value -> RuntimeIO a
-assign doRest name (Right val)  = runErrorT (setVar name val) >>= showOnlyErr doRest
-assign doRest name (Left error) = showStr doRest error
-
-{- Decl Evaluators -}
+{- Orop -}
 evalOrop :: OrOp -> RuntimeFailable (Bool, Value)
 evalOrop (Oa x)    = evalAndOp x
 evalOrop (Or x y)  = applyBinOp doOr (evalOrop x) (evalAndOp y)
     where doOr a@(t,_) b = if t then return a else return b
 
+{- AndOp -}
 evalAndOp :: AndOp -> RuntimeFailable (Bool, Value)
 evalAndOp (Ac x)    = evalComp x >>= toAndOp
 evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
@@ -78,6 +78,7 @@ toAndOp (_, _, x@(Vi 0)) = return (False, x)
 toAndOp (_, _, x@(Vi _)) = return (True, x)
 toAndOp (_, _, x@(Vb b)) = return (b, x)
 
+{- Comp -}
 evalComp :: Comp -> RuntimeFailable (Bool, Value, Value)
 evalComp (Ca x)     = evalArth x >>= toComp
 evalComp (Lt x y)   = doComp ltOp (evalComp x) (evalArth y)
@@ -111,6 +112,7 @@ ltOp x      y       = typeFail2 "comparison" x y
 eqOp :: Value -> Value -> RuntimeFailable Bool
 eqOp x y = return (x == y)
 
+{- Arth -}
 evalArth :: Arth -> RuntimeFailable Value
 evalArth (At x)     = evalTerm x
 evalArth (Add x y)  = applyBinOp add (evalArth x) (evalTerm y)
@@ -120,6 +122,7 @@ evalArth (Sub x y)  = applyBinOp sub (evalArth x) (evalTerm y)
     where sub (Vi x) (Vi y) = return . Vi $ (x - y)
           sub x      y      = typeFail2 "subtraction" x y
 
+{- Term -}
 evalTerm :: Term -> RuntimeFailable Value
 evalTerm (Tf x) = evalFact x
 evalTerm (Mult x y) = applyBinOp mult (evalTerm x) (evalFact y)
@@ -130,6 +133,7 @@ evalTerm (Div x y) = applyBinOp divide (evalTerm x) (evalFact y)
           divide (Vi x) (Vi y) = return . Vi $ (x `div` y)
           divide x      y      = typeFail2 "division" x y
 
+{- Fact -}
 evalFact :: Factor -> RuntimeFailable Value
 evalFact (Fb x) = return . Vb $ x
 evalFact (Fp x) = evalNeg x
@@ -137,11 +141,13 @@ evalFact (Fn x) = (evalNeg x) >>= negateVal
    where negateVal (Vi x) = return . Vi . negate $ x
          negateVal x      = typeFail1 "negation" x
 
+{- Neg -}
 evalNeg :: Neg -> RuntimeFailable Value
 evalNeg (Ni x) = return . Vi $ x
 evalNeg (Nd x) = getVar x
 evalNeg (Np x) = evalParen x
 
+{- Paren -}
 evalParen :: Paren -> RuntimeFailable Value
 evalParen (Po x) = evalOrop x >>= return . snd
 
