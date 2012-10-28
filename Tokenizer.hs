@@ -15,8 +15,9 @@ data Token = INT Integer
            | TLT | TEQ | TGT
            | TLTE | TGTE | TNE
            | AND | OR
-           | ASSN
-           | IF | ELSE | FI
+           | COLON
+           | IF | THEN | ELSE | OTHER | FI
+           | WHILE | REPEAT
            | LPAREN | RPAREN
            | COMMA
            deriving (Show, Eq)
@@ -28,13 +29,17 @@ isLetter x  = x `elem` (['a'..'z'] ++ ['A'..'Z'])
 
 keywords :: Map.Map String Token
 keywords = Map.fromList [
-        ("True", TRUE),
-        ("False", FALSE),
-        ("and", AND),
-        ("or", OR),
-        ("if", IF),
-        ("else", ELSE),
-        ("fi", FI)
+        ("True",      TRUE),
+        ("False",     FALSE),
+        ("and",       AND),
+        ("or",        OR),
+        ("if",        IF),
+        ("then",      THEN),
+        ("else",      ELSE),
+        ("otherwise", OTHER),
+        ("fi",        FI),
+        ("while",     WHILE),
+        ("repeat",    REPEAT)
     ]
 
 tokenize :: String -> (Failable [Token], String)
@@ -54,7 +59,7 @@ getOneToken ('*':xs)        = (return MULT,   xs)
 getOneToken ('/':xs)        = (return DIV,    xs)
 getOneToken ('(':xs)        = (return LPAREN, xs)
 getOneToken (')':xs)        = (return RPAREN, xs)
-getOneToken (':':xs)        = (return ASSN,   xs)
+getOneToken (':':xs)        = (return COLON,   xs)
 getOneToken ('<':'=':xs)    = (return TLTE,   xs)
 getOneToken ('>':'=':xs)    = (return TGTE,   xs)
 getOneToken ('!':'=':xs)    = (return TNE,    xs)

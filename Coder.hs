@@ -2,28 +2,28 @@ module Coder (
     repl
 ) where
 
-import Control.Monad (liftM2)
-import Control.Monad.Trans.Error
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State (evalState)
 
 import Failure
 import Tokenizer (tokenize)
-import Parser (parse, Decl(..), Line(..), Stmt(..))
-import Runner
+import Parser (parse, Decl(..))
+import Eval (newRuntime, getVar, setVar, getInput, updateInput)
+import Runner (RuntimeIO, runLine, showStr)
 
 repl :: IO ()
-repl = getContents >>= replRun
+repl = getContents >>= replStr
 
-replRun :: String -> IO ()
-replRun input = evalState replRunRest (newRuntime input)
+replStr :: String -> IO ()
+replStr input = evalState replRest (newRuntime input)
 
-replRunRest :: RuntimeIO ()
-replRunRest = replRunLine (return [])
+replRest :: RuntimeIO ()
+replRest = replLine (return [])
 
-replRunLine :: Either Failure [Decl] -> RuntimeIO ()
-replRunLine (Left error)        = showRawError error
-replRunLine (Right [(Dl line)]) = replLine replRunRest line
-replRunLine (Right unmatched)   = do
+replLine :: Either Failure [Decl] -> RuntimeIO ()
+replLine (Left error)             = showStr error replRest
+replLine (Right [(Dl line)])      = runLine line replRest
+replLine (Right line@((Dl _):_))  = replLine (Right (Dnewline:line))
+replLine (Right unmatched) = do
         input <- getInput
         case (unmatched, input) of
             ([], []) -> return . return $ ()
@@ -31,19 +31,5 @@ replRunLine (Right unmatched)   = do
             _     -> do let (tokens, restInput) = tokenize input
                             decls = tokens >>= parse unmatched
                         updateInput restInput
-                        replRunLine (extract decls)
+                        replLine (extract decls)
 
-replLine :: RuntimeIO () -> Line -> RuntimeIO ()
-replLine doRest (Ls stmt)       = replStmt doRest stmt
-replLine doRest (Lm line stmt)  = replLine (replStmt doRest stmt) line
-
-replStmt :: RuntimeIO () -> Stmt -> RuntimeIO ()
-replStmt doRest (Assn name expr) = runExpr expr >>= replAssign doRest name
-replStmt doRest (Se expr) = runExpr expr >>= showValOrErr doRest
-
-replAssign :: RuntimeIO () -> String -> Either Failure Value -> RuntimeIO ()
-replAssign doRest name (Right val)  = runErrorT (setVar name val) >>= showOnlyErr doRest
-replAssign doRest name (Left error) = showStr doRest error
-
-showRawError :: String -> RuntimeIO ()
-showRawError str = showStr replRunRest str

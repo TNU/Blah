@@ -1,0 +1,54 @@
+if False then
+    -1
+otherwise
+    1
+fi
+
+if 1 * (5 - 5) then
+-2
+otherwise 2 fi
+
+if 4 < 4 then -3 otherwise 3 fi
+
+a: 7
+if a >= 8 then
+-4
+otherwise
+    if a <= 3 then
+        -5
+    otherwise
+        4
+    fi
+fi
+
+b: 8
+c: 9
+if (b > c) then
+    -6
+else if b = c then
+    - 7
+else if b = c - 1 then
+    5
+otherwise
+    -8
+fi
+
+if 0 then -9 else if 1 then 6 fi
+
+if False then
+-10
+else
+
+
+
+
+
+if
+-11 +
+
+100
+then
+
+    7
+
+fi

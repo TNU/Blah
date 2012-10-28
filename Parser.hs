@@ -1,6 +1,8 @@
 module Parser (
     Line(..),
     Stmt(..),
+    IfStmt(..),
+    WhileStmt(..),
     Decl(..),
     OrOp(..),
     AndOp(..),
@@ -19,6 +21,7 @@ import Control.Monad.Trans.Error
 import Failure
 import Tokenizer
 
+-- decls are showable and equable for testing
 data Decl = Dl Line
           | Ds Stmt
           | Do OrOp
@@ -29,15 +32,26 @@ data Decl = Dl Line
           | Df Factor
           | Dk Token
           | Dn Neg
+          | Dnewline
           deriving (Show, Eq)
-          
+
 data Line = Ls Stmt
           | Lm Line Stmt
           deriving (Show, Eq)
 
 data Stmt = Se OrOp
+          | Si IfStmt
+          | Sw WhileStmt
           | Assn String OrOp
           deriving (Show, Eq)
+
+data IfStmt = If OrOp Line
+            | IfOther OrOp Line Line
+            | IfElse OrOp Line IfStmt
+            deriving (Show, Eq)
+
+data WhileStmt = While OrOp Line
+               deriving (Show, Eq)
 
 data OrOp = Oa AndOp
           | Or OrOp AndOp
@@ -141,17 +155,45 @@ reduce decls@((Do orop):(Dk LPAREN):rest)       tokens = shift decls tokens
 reduce ((Dk RPAREN):(Do orop):(Dk LPAREN):rest) tokens = reduce ((Dn (Np (Po orop))):rest) tokens
 
 {- assign -}  -- assignments not allowed across lines
-reduce decls@((Dn (Nd id)):rest)       tokens@(ASSN:_) = shift decls tokens
-reduce decls@((Dk ASSN):(Dn (Nd id)):rs)  tokens@(_:_) = shift decls tokens
-reduce ((Do orop):(Dk ASSN):(Dn (Nd name)):rs)  tokens = reduce ((Ds (Assn name orop)):rs) tokens
+reduce decls@((Dn (Nd id)):rest)      tokens@(COLON:_) = shift decls tokens
+reduce decls@((Dk COLON):(Dn (Nd id)):rs) tokens@(_:_) = shift decls tokens
+reduce ((Do orop):(Dk COLON):(Dn (Nd name)):rs) tokens = reduce ((Ds (Assn name orop)):rs) tokens
 
-{- lines -}
+{- if -}
+reduce decls@((Dk IF):rest)                      tokens = shift decls tokens
+reduce decls@((Do orop):(Dk IF):rest)            tokens = shift decls tokens
+reduce decls@((Dk THEN):(Do orop):(Dk IF):rest)  tokens = shift decls tokens
+reduce decls@((Dl lines):(Dk THEN):(Do orop):(Dk IF):rest)               tokens = shift decls tokens
+reduce decls@((Dk FI):(Dl lines):(Dk THEN):(Do orop):(Dk IF):rest)       tokens = reduce ((Ds (Si (If orop lines))):rest) tokens
+reduce decls@((Dk OTHER):(Dl lines):(Dk THEN):(Do orop):(Dk IF):rest)    tokens = shift decls tokens
+reduce decls@((Dl b):(Dk OTHER):(Dl a):(Dk THEN):(Do orop):(Dk IF):rest) tokens = shift decls tokens
+reduce decls@((Dk FI):(Dl b):(Dk OTHER):(Dl a):(Dk THEN):(Do t):(Dk IF):rest) tokens = reduce (Ds (Si (IfOther t a b)):rest) tokens
+reduce decls@((Dk ELSE):(Dl a):(Dk THEN):(Do orop):(Dk IF):rest)         tokens = shift decls tokens
+reduce decls@((Ds (Si ifStmt)):(Dk ELSE):(Dl a):(Dk THEN):(Do t):(Dk IF):rest) tokens = reduce (Ds (Si (IfElse t a ifStmt)):rest) tokens
+
+reduce decls@((Dk OTHER):Dnewline:rest) tokens = reduce ((Dk OTHER):rest) tokens
+reduce decls@((Dk ELSE):Dnewline:rest)  tokens = reduce ((Dk ELSE):rest) tokens
+reduce decls@((Dk FI):Dnewline:rest)    tokens = reduce ((Dk FI):rest) tokens
+
+{- while -}
+reduce decls@((Dk WHILE):rest)                     tokens = shift decls tokens
+reduce decls@((Do orop):(Dk WHILE):rest)           tokens = shift decls tokens
+reduce decls@((Dk THEN):(Do orop):(Dk WHILE):rest) tokens = shift decls tokens
+reduce decls@((Dl lines):(Dk THEN):(Do orop):(Dk WHILE):rest) tokens = shift decls tokens
+reduce decls@((Dk REPEAT):(Dl lines):(Dk THEN):(Do orop):(Dk WHILE):rest) tokens = reduce (Ds (Sw (While orop lines)):rest) tokens
+reduce decls@((Dk REPEAT):Dnewline:rest)           tokens = reduce ((Dk REPEAT):rest) tokens
+
+{- comma line combination -}  -- comma cannot be the last character in a line
 reduce decls@((Dl line):rest)          tokens@(COMMA:_) = shift decls tokens
-reduce decls@((Dk COMMA):(Dl line):rest)         tokens = shift decls tokens
+reduce decls@((Dk COMMA):(Dl line):rest)   tokens@(_:_) = shift decls tokens
 reduce decls@((Ds stmt):(Dk COMMA):(Dl line):rs) tokens = reduce ((Dl (Lm line stmt)):rs) tokens
 
+{- automatic line combination -}
+reduce decls@(Dnewline:(Dl line):rest)         tokens = shift decls tokens
+reduce decls@((Ds stmt):Dnewline:(Dl line):rs) tokens = reduce ((Dl (Lm line stmt)):rs) tokens
+
 {- negation -}  -- negation not allowed across lines
-reduce decls@((Dk MINUS):rest) tokens@(tok:_) = shift decls tokens
+reduce decls@((Dk MINUS):rest)               tokens@(_:_) = shift decls tokens
 reduce ((Dn neg):(Dk MINUS):rest) tokens | negatable rest = reduce (Df (Fn neg):rest) tokens
     where negatable ((Da _):xs) = False
           negatable _           = True

@@ -11,18 +11,61 @@ shortCircuit: (0 and 1 or 4 and 5) == 5
 
 concat: "the" # " value of " # varName # " is " # 13 * 34 # 14.23 " ."
 comment: "the" ++ "value of " ++ varName ++ "is " ++ 12 - 243 ++ 12
-more: () {
-    if empty then
-        showShop(dd)
+
+to find `gcd_of @a and @b:
+    if b > 0 then
+        return gcd_of b@a (@a mod @b)@b
     else
-        showShow(door * var)
+        return a
     fi
 
-    while i < 7 do
-        print i
-    done
-}
+    while wasting_time then
+        have_fun
+    repeat
+done
 
-showShop: (shop) {
-    println(shop)
-}
+to `add_person to @database with @name, @address, @phone:
+    if is_valid @name and is_valid @address:
+        service: get_service_to @database
+        results: service.workers.run "SELECT * from tables"@sql_query
+
+        for each result in results
+
+        close @service
+    fi
+ot
+
+convertToNumber: with number, radix do
+    if name @is_a_valid_name and address @is_a_valid_address then
+        for each result in results:
+            @print result
+            html:  (@compile result @to_template "list.template")
+        rof
+    fi
+
+    return
+done
+
+add_person: with name, phone, address, database do
+    Nothing
+done
+
+to calculate `tip for @payment in a @type restaurant:
+    if type = 'high end' then
+        return 0.15 * payment
+    else if type = 'medium' then
+        return 0.15 * payment
+    otherwise
+        return 0
+    fi
+done
+
+write (tip_for 12.12@payment "medium"@type) to
+
+if mood = 'happy' then
+    say @'happy'
+else mood = 'sad' then
+    say @'sad'
+otherwise
+    say @Nothing
+fi
