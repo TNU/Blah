@@ -44,6 +44,7 @@ for badFile in "$testCaseDir"*".bad"; do
     oldIFS="$IFS"
     while IFS= read -r output <&3
           IFS= read -r errors <&4; do
+
         grep "$errors" <<< "$output" > /dev/null
 
         if [ $? -eq 1 ]; then
@@ -59,6 +60,21 @@ for badFile in "$testCaseDir"*".bad"; do
         fi
     done
     IFS="$oldIFS"
+
+    outputLines="$(wc -l < "$outputFile")"
+    errorsLines="$(wc -l < "$errorsFile")"
+
+    if [ $outputLines -ne $errorsLines ]; then
+        if [ -z "$failedThisTest" ]; then
+            echo "Failed $badFile"
+            failedThisTest="True"
+            failed="True"
+        fi
+
+        if [ $# -ge 1 ]; then
+            echo "Expeced $errorsLines lines but got $outputLines"
+        fi
+    fi
 
 done
 

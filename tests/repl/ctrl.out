@@ -8,6 +8,7 @@
 <parse> [Dk THEN,Dk PLUS,Da (At (Tf (Fp (Ni 12)))),Dk IF] [INT 23,FI]
 <parse> [Dk COMMA,Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 4))))))),Dk IF] [INT 5]
 <parse> [Dk FI] []
+10
 <parse> [Dl (Ls (Assn "b" (Oa (Ac (Ca (At (Tf (Fp (Ni 6))))))))),Dk IF] [THEN,INT 13]
 <parse> [Dk COMMA] [FI]
 <parse> [Dk FI,Dk COMMA,Dl (Lm (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 54))))))))) (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 23))))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fb False)))))),Dk IF] []
@@ -15,8 +16,10 @@
 <parse> [Dk ELSE,Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 0))))))),Dk IF] [IF,INT 2,THEN,INT 3,ID "othewise",INT 4,FI]
 <parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 4))))))))),Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Nd "othewise"))))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 2))))))),Dk IF,Dk ELSE,Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 1))))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 0))))))),Dk IF] [FI]
 <parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Nd "othewise"))))))))),Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 3))))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 2))))))),Dk IF,Dk ELSE,Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 1))))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 0))))))),Dk IF] [FI]
-<parse> [Dk THEN,Dk IF] []
-True
+<parse> [Dk THEN,Dk IF] [TRUE,FI]
+<parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fb False)))))))),Dk ELSE,Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fb True)))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 12))))))),Dk IF] []
 <parse> [Dk FI] []
-<parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fb False)))))))),Dk ELSE,Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fb True)))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Nd "Nothing"))))))),Dk IF] []
-<parse> [Dk FI] []
+<parse> [Dk COMMA,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 12))))))),Dk WHILE,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 23))))))),Dk WHILE] [INT 43,THEN]
+<parse> [Dk COMMA,Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 123))))))))),Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 1))))))),Dk WHILE] []
+<parse> [Dk REPEAT] []
+<parse> [Dk REPEAT,Dk THEN,Do (Oa (Ac (Ca (At (Tf (Fp (Ni 1))))))),Dk WHILE] []

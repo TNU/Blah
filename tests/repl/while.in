@@ -1,0 +1,26 @@
+b: False
+while b then
+    -1
+repeat
+
+c: 8
+while c then
+    c: c - 1
+    c
+repeat
+
+True
+d: -29
+while d + 5 * 4  - (19 - 3) <= 0 then
+    d
+    if d < 10 and d > -50 then
+        d : d - 10
+    otherwise
+        d : -d
+    fi
+repeat
+d
+
+True
+c: 0
+while c > -9 then c : c - 1, c repeat
