@@ -7,6 +7,7 @@ module Parser (
     OrOp(..),
     AndOp(..),
     Comp(..),
+    Join(..),
     Arth(..),
     Term(..),
     Factor(..),
@@ -27,6 +28,7 @@ data Decl = Dl Line
           | Do OrOp
           | Dd AndOp
           | Dc Comp
+          | Dj Join
           | Da Arth
           | Dt Term
           | Df Factor
@@ -61,15 +63,20 @@ data AndOp = Ac Comp
           | And AndOp Comp
           deriving (Show, Eq)
 
-data Comp = Ca Arth
-          | Lt  Comp Arth
-          | Eq  Comp Arth
-          | Gt  Comp Arth
-          | Lte Comp Arth
-          | Gte Comp Arth
-          | Ne  Comp Arth
+data Comp = Cj  Join
+          | Lt  Comp Join
+          | Eq  Comp Join
+          | Gt  Comp Join
+          | Lte Comp Join
+          | Gte Comp Join
+          | Ne  Comp Join
           deriving (Show, Eq)
 
+data Join = Ja Arth
+          | Concat Join Arth
+          deriving (Show, Eq)
+          
+          
 data Arth = At Term
           | Add Arth Term
           | Sub Arth Term
@@ -83,6 +90,8 @@ data Term = Tf Factor
 data Factor = Fp Neg
             | Fn Neg
             | Fb Bool
+            | Fs String
+            | Fnothing
             deriving (Show, Eq)
 
 data Neg  = Ni Integer
@@ -132,12 +141,12 @@ reduce decls@((Dk TNE):(Dc comp):rest)      tokens = shift decls tokens
 reduce decls@((Dk TLT):(Dc comp):rest)      tokens = shift decls tokens
 reduce decls@((Dk TEQ):(Dc comp):rest)      tokens = shift decls tokens
 reduce decls@((Dk TGT):(Dc comp):rest)      tokens = shift decls tokens
-reduce ((Da arth):(Dk TLTE):(Dc comp):rest) tokens = reduce ((Dc (Lte comp arth)):rest)  tokens
-reduce ((Da arth):(Dk TGTE):(Dc comp):rest) tokens = reduce ((Dc (Gte comp arth)):rest)  tokens
-reduce ((Da arth):(Dk TNE):(Dc comp):rest)  tokens = reduce ((Dc (Ne  comp arth)):rest)  tokens
-reduce ((Da arth):(Dk TLT):(Dc comp):rest)  tokens = reduce ((Dc (Lt  comp arth)):rest)  tokens
-reduce ((Da arth):(Dk TEQ):(Dc comp):rest)  tokens = reduce ((Dc (Eq  comp arth)):rest)  tokens
-reduce ((Da arth):(Dk TGT):(Dc comp):rest)  tokens = reduce ((Dc (Gt  comp arth)):rest)  tokens
+reduce ((Dj join):(Dk TLTE):(Dc comp):rest) tokens = reduce ((Dc (Lte comp join)):rest)  tokens
+reduce ((Dj join):(Dk TGTE):(Dc comp):rest) tokens = reduce ((Dc (Gte comp join)):rest)  tokens
+reduce ((Dj join):(Dk TNE):(Dc comp):rest)  tokens = reduce ((Dc (Ne  comp join)):rest)  tokens
+reduce ((Dj join):(Dk TLT):(Dc comp):rest)  tokens = reduce ((Dc (Lt  comp join)):rest)  tokens
+reduce ((Dj join):(Dk TEQ):(Dc comp):rest)  tokens = reduce ((Dc (Eq  comp join)):rest)  tokens
+reduce ((Dj join):(Dk TGT):(Dc comp):rest)  tokens = reduce ((Dc (Gt  comp join)):rest)  tokens
 
 {- and operation -}
 reduce decls@((Dd andop):rest)      tokens@(AND:_) = shift decls tokens
@@ -159,6 +168,10 @@ reduce decls@((Dn (Nd id)):rest)      tokens@(COLON:_) = shift decls tokens
 reduce decls@((Dk COLON):(Dn (Nd id)):rs) tokens@(_:_) = shift decls tokens
 reduce ((Do orop):(Dk COLON):(Dn (Nd name)):rs) tokens = reduce ((Ds (Assn name orop)):rs) tokens
 
+reduce decls@((Dj join):rest)          tokens@(CONCAT:_) = shift decls tokens
+reduce decls@((Dk CONCAT):(Dj join):rest)         tokens = shift decls tokens
+reduce decls@((Da arth):(Dk CONCAT):(Dj join):rs) tokens = reduce ((Dj (Concat join arth)):rs) tokens
+ 
 {- if -}
 reduce decls@((Dk IF):rest)                      tokens = shift decls tokens
 reduce decls@((Do orop):(Dk IF):rest)            tokens = shift decls tokens
@@ -199,18 +212,21 @@ reduce ((Dn neg):(Dk MINUS):rest) tokens | negatable rest = reduce (Df (Fn neg):
           negatable _           = True
 
 {- promotions -}
-reduce ((Dk TRUE):rest)      tokens = reduce ((Df (Fb True)):rest)  tokens
-reduce ((Dk FALSE):rest)     tokens = reduce ((Df (Fb False)):rest) tokens
-reduce ((Dk (INT int)):rest) tokens = reduce ((Dn (Ni int)):rest)   tokens
-reduce ((Dk (ID id)):rest)   tokens = reduce ((Dn (Nd id)):rest)    tokens
-reduce ((Dn neg):rest)       tokens = reduce ((Df (Fp neg)):rest)   tokens
-reduce ((Df fact):rest)      tokens = reduce ((Dt (Tf fact)):rest)  tokens
-reduce ((Dt term):rest)      tokens = reduce ((Da (At term)):rest)  tokens
-reduce ((Da arth):rest)      tokens = reduce ((Dc (Ca arth)):rest)  tokens
-reduce ((Dc comp):rest)      tokens = reduce ((Dd (Ac comp)):rest)  tokens
-reduce ((Dd andop):rest)     tokens = reduce ((Do (Oa andop)):rest) tokens
-reduce ((Do orop):rest)      tokens = reduce ((Ds (Se orop)):rest)  tokens
-reduce ((Ds stmt):rest)      tokens = reduce ((Dl (Ls stmt)):rest)  tokens
+reduce ((Dk (STRING s)):rest) tokens = reduce ((Df (Fs s)):rest)     tokens
+reduce ((Dk NOTHING):rest)    tokens = reduce ((Df (Fnothing)):rest) tokens
+reduce ((Dk TRUE):rest)       tokens = reduce ((Df (Fb True)):rest)  tokens
+reduce ((Dk FALSE):rest)      tokens = reduce ((Df (Fb False)):rest) tokens
+reduce ((Dk (INT int)):rest)  tokens = reduce ((Dn (Ni int)):rest)   tokens
+reduce ((Dk (ID id)):rest)    tokens = reduce ((Dn (Nd id)):rest)    tokens
+reduce ((Dn neg):rest)        tokens = reduce ((Df (Fp neg)):rest)   tokens
+reduce ((Df fact):rest)       tokens = reduce ((Dt (Tf fact)):rest)  tokens
+reduce ((Dt term):rest)       tokens = reduce ((Da (At term)):rest)  tokens
+reduce ((Da arth):rest)       tokens = reduce ((Dj (Ja arth)):rest)  tokens
+reduce ((Dj join):rest)       tokens = reduce ((Dc (Cj join)):rest)  tokens
+reduce ((Dc comp):rest)       tokens = reduce ((Dd (Ac comp)):rest)  tokens
+reduce ((Dd andop):rest)      tokens = reduce ((Do (Oa andop)):rest) tokens
+reduce ((Do orop):rest)       tokens = reduce ((Ds (Se orop)):rest)  tokens
+reduce ((Ds stmt):rest)       tokens = reduce ((Dl (Ls stmt)):rest)  tokens
 
 {- base cases -}
 reduce decls@[Dl _] []      = return decls
@@ -225,7 +241,8 @@ demote :: Decl -> Decl
 demote (Ds (Se orop))  = demote (Do orop)
 demote (Do (Oa andop)) = demote (Dd andop)
 demote (Dd (Ac comp))  = demote (Dc comp)
-demote (Dc (Ca arth))  = demote (Da arth)
+demote (Dc (Cj join))  = demote (Dj join)
+demote (Dj (Ja arth))  = demote (Da arth)
 demote (Da (At term))  = demote (Dt term)
 demote (Dt (Tf fact))  = demote (Df fact)
 demote x               = x

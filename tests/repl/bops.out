@@ -1,3 +1,3 @@
-<eval> comparison of "Vb False" and "Vi 42" is not supported
-<eval> comparison of "Vi 42" and "Vb True" is not supported
-<eval> comparison of "Vi 54" and "Vb True" is not supported
+<eval> comparison of "False" and "42" is not supported
+<eval> comparison of "42" and "True" is not supported
+<eval> comparison of "54" and "True" is not supported

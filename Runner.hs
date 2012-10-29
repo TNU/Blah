@@ -51,16 +51,12 @@ runWhileStmt stmt@(While test lines) = testExpr test `passTo` \result ->
 
 {- Show Functions -}
 showValOrErr :: Either Failure Value -> RuntimeAction a
-showValOrErr (Right val)  = showVal val
+showValOrErr (Right val)  = showRaw  val
 showValOrErr (Left error) = showStr error
 
 showOnlyErr :: Either Failure () -> RuntimeAction a
 showOnlyErr (Right ()) = id
 showOnlyErr (Left error) = showStr error
-
-showVal :: Value -> RuntimeAction a
-showVal (Vi int)  = showRaw int
-showVal (Vb bool) = showRaw bool
 
 showRaw :: (Show t) => t -> RuntimeAction a
 showRaw = showStr . show
@@ -73,8 +69,7 @@ runExpr :: Expr -> RuntimeState (Either Failure Value)
 runExpr expr = runErrorT (evalExpr expr) >>= return . liftM snd
 
 testExpr :: Expr -> RuntimeState (Either Failure Bool)
-testExpr expr = runExpr expr >>= return . (liftM toBool)
-
+testExpr expr = runErrorT (evalExpr expr >>= toBool . snd)
 passTo :: RuntimeState a -> (a -> RuntimeAction b) -> RuntimeAction b
 passTo value action doRest = value >>= \x -> action x doRest
 

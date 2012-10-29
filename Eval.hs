@@ -14,7 +14,7 @@ module Eval (
     toBool,
 ) where
 
-import Control.Monad (liftM2, join)
+import Control.Monad (liftM, liftM2, join)
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
 
@@ -25,7 +25,15 @@ import Parser
 
 data Value = Vi Integer
            | Vb Bool
-           deriving (Show, Eq)
+           | Vs String
+           | Vnothing
+           deriving (Eq)
+
+instance Show Value where
+    show (Vi int)  = show int
+    show (Vb bool) = show bool
+    show (Vs string) = string
+    show Vnothing  = "Nothing"
 
 type Scope           = Map.Map String Value
 type RuntimeState    = State (Scope, String)
@@ -50,21 +58,21 @@ evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
     where doAnd a@(t,_) b = if t then toAndOp b else return a
 
 toAndOp :: (Bool, Value, Value) -> RuntimeFailable (Bool, Value)
-toAndOp (_, _, x) = return (toBool x, x)
+toAndOp (_, _, x) = toBool x >>= \b -> return (b, x)
 
 {- Comp -}
 evalComp :: Comp -> RuntimeFailable (Bool, Value, Value)
-evalComp (Ca x)     = evalArth x >>= toComp
-evalComp (Lt x y)   = doComp ltOp (evalComp x) (evalArth y)
-evalComp (Eq x y)   = doComp eqOp (evalComp x) (evalArth y)
-evalComp (Gt x y)   = doComp gtOp (evalComp x) (evalArth y)
+evalComp (Cj x)     = evalJoin x >>= toComp
+evalComp (Lt x y)   = doComp ltOp (evalComp x) (evalJoin y)
+evalComp (Eq x y)   = doComp eqOp (evalComp x) (evalJoin y)
+evalComp (Gt x y)   = doComp gtOp (evalComp x) (evalJoin y)
     where gtOp      = flip ltOp
-evalComp (Lte x y)  = doComp lteOp(evalComp x) (evalArth y)
-    where lteOp x y = ltOp y x >>= return . not
-evalComp (Gte x y)  = doComp gteOp (evalComp x) (evalArth y)
-    where gteOp x y = ltOp x y >>= return . not
-evalComp (Ne x y)   = doComp neOp (evalComp x) (evalArth y)
-    where neOp x y  = eqOp x y >>= return . not
+evalComp (Lte x y)  = doComp lteOp(evalComp x) (evalJoin y)
+    where lteOp x y = not `liftM` ltOp y x
+evalComp (Gte x y)  = doComp gteOp (evalComp x) (evalJoin y)
+    where gteOp x y = not `liftM` ltOp x y
+evalComp (Ne x y)   = doComp neOp (evalComp x) (evalJoin y)
+    where neOp x y  = not `liftM` eqOp x y
 
 toComp :: Value -> RuntimeFailable (Bool, Value, Value)
 toComp x = return (True, x, x)
@@ -80,11 +88,18 @@ doComp op a b = do (old, x, _)  <- a
                    return (new, y, Vb new)
 
 ltOp :: Value -> Value -> RuntimeFailable Bool
-ltOp (Vi x) (Vi y)  = return (x < y)
-ltOp x      y       = typeFail2 "comparison" x y
+ltOp (Vi x) (Vi y) = return (x < y)
+ltOp (Vs x) (Vs y) = return (x < y)
+ltOp x      y      = typeFail2 "comparison" x y
 
 eqOp :: Value -> Value -> RuntimeFailable Bool
 eqOp x y = return (x == y)
+
+{- Join -}
+evalJoin :: Join -> RuntimeFailable Value
+evalJoin (Ja x)       = evalArth x
+evalJoin (Concat x y) = applyBinOp conc (evalJoin x) (evalArth y)
+    where conc x y = return . Vs $ ((show x) ++ (show y))
 
 {- Arth -}
 evalArth :: Arth -> RuntimeFailable Value
@@ -109,9 +124,11 @@ evalTerm (Div x y) = applyBinOp divide (evalTerm x) (evalFact y)
 
 {- Fact -}
 evalFact :: Factor -> RuntimeFailable Value
-evalFact (Fb x) = return . Vb $ x
-evalFact (Fp x) = evalNeg x
-evalFact (Fn x) = (evalNeg x) >>= negateVal
+evalFact (Fnothing) = return Vnothing
+evalFact (Fb x)     = return . Vb $ x
+evalFact (Fs x)     = return . Vs $ x
+evalFact (Fp x)     = evalNeg x
+evalFact (Fn x)     = (evalNeg x) >>= negateVal
    where negateVal (Vi x) = return . Vi . negate $ x
          negateVal x      = typeFail1 "negation" x
 
@@ -143,10 +160,13 @@ setVar name val = ErrorT . state $ action
         where action (scope, i) = (return (), (Map.insert name val scope, i))
 
 {- Converters -}
-toBool :: Value -> Bool
-toBool (Vi 0) = False
-toBool (Vi x) = True
-toBool (Vb x) = x
+toBool :: Value -> RuntimeFailable Bool
+toBool (Vi 0)   = return False
+toBool (Vi x)   = return True
+toBool (Vb x)   = return x
+toBool (Vs "")  = return False
+toBool (Vs x)   = return True
+toBool Vnothing = return False
 
 {- Utility Functions -}
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c

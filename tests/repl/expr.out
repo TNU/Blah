@@ -1,10 +1,10 @@
 <tokenize> umatched token '~'
 <parse> [Dk MULT] [INT 5]
 <parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fn (Ni 5))))))))),Dk MINUS,Dk PLUS,Da (At (Tf (Fp (Ni 3))))] []
-<eval> multiplication of "Vi 51" and "Vb True" is not supported
-<eval> multiplication of "Vi 51" and "Vb True" is not supported
+<eval> multiplication of "51" and "True" is not supported
+<eval> multiplication of "51" and "True" is not supported
 <parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fb False)))))))),Dk MINUS] []
-<eval> negation of "Vb False" is not supported
+<eval> negation of "False" is not supported
 <parse> [Dk MINUS] []
 3
 <parse> [Dl (Ls (Se (Oa (Ac (Ca (At (Tf (Fp (Ni 5)))))))))] [RPAREN]
