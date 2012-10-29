@@ -16,6 +16,7 @@ data Token = INT Integer
            | NOTHING
            | DOT
            | LBRA | RBRA
+           | AT
            | PLUS | MINUS | MULT | DIV
            | CONCAT
            | TLT | TEQ | TGT
