@@ -71,7 +71,7 @@ evalComp (Lte x y)  = doComp lteOp(evalComp x) (evalJoin y)
     where lteOp x y = not `liftM` ltOp y x
 evalComp (Gte x y)  = doComp gteOp (evalComp x) (evalJoin y)
     where gteOp x y = not `liftM` ltOp x y
-evalComp (Ne x y)   = doComp neOp (evalComp x) (evalJoin y)
+evalComp (Neq x y)   = doComp neOp (evalComp x) (evalJoin y)
     where neOp x y  = not `liftM` eqOp x y
 
 toComp :: Value -> RuntimeFailable (Bool, Value, Value)
@@ -140,7 +140,7 @@ evalNeg (Np x) = evalParen x
 
 {- Paren -}
 evalParen :: Paren -> RuntimeFailable Value
-evalParen (Po x) = evalOrop x >>= return . snd
+evalParen (Pe x) = evalOrop x >>= return . snd
 
 {- State Modifiers -}
 getInput :: RuntimeState String

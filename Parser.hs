@@ -25,7 +25,7 @@ import Tokenizer
 -- decls are showable and equable for testing
 data Decl = Dl Line
           | Ds Stmt
-          | Do OrOp
+          | Db OrOp
           | Dd AndOp
           | Dc Comp
           | Dj Join
@@ -34,6 +34,9 @@ data Decl = Dl Line
           | Df Factor
           | Dk Token
           | Dn Neg
+          | Do Obj
+          | De Elem
+          | Dp Paren
           | Dnewline
           deriving (Show, Eq)
 
@@ -69,7 +72,7 @@ data Comp = Cj  Join
           | Gt  Comp Join
           | Lte Comp Join
           | Gte Comp Join
-          | Ne  Comp Join
+          | Neq Comp Join
           deriving (Show, Eq)
 
 data Join = Ja Arth
@@ -97,9 +100,23 @@ data Factor = Fp Neg
 data Neg  = Ni Integer
           | Nd String
           | Np Paren
+          | No Obj
+          | Ne Elem
           deriving (Show, Eq)
 
-data Paren = Po OrOp
+data Obj = PropS String String
+         | PropD String String
+         | PropP Paren  String
+         | PropO Obj    String
+         deriving (Show, Eq)
+         
+data Elem = ElemS String OrOp
+          | ElemD String OrOp
+          | ElemP Paren  OrOp
+          | ElemO Obj    OrOp
+          deriving (Show, Eq)
+         
+data Paren = Pe OrOp
            deriving (Show, Eq)
 
 parse :: [Decl] -> [Token] -> Failable [Decl]
@@ -112,9 +129,41 @@ shift decls []                  = return decls
 
 reduce :: [Decl] -> [Token] -> Failable [Decl]
 
+{- object -}
+reduce decls@((Dk (STR s)):rest)  tokens@(DOT:_) = shift decls tokens
+reduce decls@((Dk (ID d)):rest)   tokens@(DOT:_) = shift decls tokens
+reduce decls@((Dp paren):rest)    tokens@(DOT:_) = shift decls tokens
+reduce decls@((Do obj):rest)      tokens@(DOT:_) = shift decls tokens
+reduce decls@((Dk DOT):(Dk (STR x)):rest) tokens = shift decls tokens
+reduce decls@((Dk DOT):(Dk (ID x)):rest)  tokens = shift decls tokens
+reduce decls@((Dk DOT):(Dp paren):rest)   tokens = shift decls tokens
+reduce decls@((Dk DOT):(Do obj):rest)     tokens = shift decls tokens
+reduce ((Dk (ID d)):(Dk DOT):(Dk (STR x)):rest) tokens = reduce ((Do (PropS x d)):rest) tokens
+reduce ((Dk (ID d)):(Dk DOT):(Dk (ID x)):rest)  tokens = reduce ((Do (PropD x d)):rest) tokens
+reduce ((Dk (ID d)):(Dk DOT):(Dp x):rest)       tokens = reduce ((Do (PropP x d)):rest) tokens
+reduce ((Dk (ID d)):(Dk DOT):(Do x):rest)       tokens = reduce ((Do (PropO x d)):rest) tokens
+
+{- elem -}
+reduce decls@((Dk (STR s)):rest)  tokens@(LBRA:_) = shift decls tokens
+reduce decls@((Dk (ID d)):rest)   tokens@(LBRA:_) = shift decls tokens
+reduce decls@((Dp paren):rest)    tokens@(LBRA:_) = shift decls tokens
+reduce decls@((Do obj):rest)      tokens@(LBRA:_) = shift decls tokens
+reduce decls@((Dk LBRA):(Dk (STR x)):rest) tokens = shift decls tokens
+reduce decls@((Dk LBRA):(Dk (ID x)):rest)  tokens = shift decls tokens
+reduce decls@((Dk LBRA):(Dp paren):rest)   tokens = shift decls tokens
+reduce decls@((Dk LBRA):(Do obj):rest)     tokens = shift decls tokens
+reduce decls@((Db i):(Dk LBRA):(Dk (STR x)):rest) tokens = shift decls tokens
+reduce decls@((Db i):(Dk LBRA):(Dk (ID x)):rest)  tokens = shift decls tokens
+reduce decls@((Db i):(Dk LBRA):(Dp x):rest)       tokens = shift decls tokens
+reduce decls@((Db i):(Dk LBRA):(Do x):rest)       tokens = shift decls tokens
+reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dk (STR x)):rest) tokens = reduce ((De (ElemS x i)):rest) tokens
+reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dk (ID x)):rest)  tokens = reduce ((De (ElemD x i)):rest) tokens
+reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dp x):rest)       tokens = reduce ((De (ElemP x i)):rest) tokens
+reduce ((Dk RBRA):(Db i):(Dk LBRA):(Do x):rest)       tokens = reduce ((De (ElemO x i)):rest) tokens
+
 {- terms -}
 reduce decls@((Dt term):rest)       tokens@(MULT:_) = shift decls tokens
-reduce decls@((Dt term):rest)       tokens@(DIV:_)  = shift decls tokens
+reduce decls@((Dt term):rest)        tokens@(DIV:_) = shift decls tokens
 reduce decls@((Dk MULT):(Dt term):rest)      tokens = shift decls tokens
 reduce decls@((Dk DIV):(Dt term):rest)       tokens = shift decls tokens
 reduce ((Df fact):(Dk MULT):(Dt term):rest)  tokens = reduce ((Dt (Mult term fact)):rest) tokens
@@ -143,7 +192,7 @@ reduce decls@((Dk TEQ):(Dc comp):rest)      tokens = shift decls tokens
 reduce decls@((Dk TGT):(Dc comp):rest)      tokens = shift decls tokens
 reduce ((Dj join):(Dk TLTE):(Dc comp):rest) tokens = reduce ((Dc (Lte comp join)):rest)  tokens
 reduce ((Dj join):(Dk TGTE):(Dc comp):rest) tokens = reduce ((Dc (Gte comp join)):rest)  tokens
-reduce ((Dj join):(Dk TNE):(Dc comp):rest)  tokens = reduce ((Dc (Ne  comp join)):rest)  tokens
+reduce ((Dj join):(Dk TNE):(Dc comp):rest)  tokens = reduce ((Dc (Neq  comp join)):rest)  tokens
 reduce ((Dj join):(Dk TLT):(Dc comp):rest)  tokens = reduce ((Dc (Lt  comp join)):rest)  tokens
 reduce ((Dj join):(Dk TEQ):(Dc comp):rest)  tokens = reduce ((Dc (Eq  comp join)):rest)  tokens
 reduce ((Dj join):(Dk TGT):(Dc comp):rest)  tokens = reduce ((Dc (Gt  comp join)):rest)  tokens
@@ -154,19 +203,19 @@ reduce decls@((Dk AND):(Dd andop):rest)     tokens = shift decls tokens
 reduce ((Dc comp):(Dk AND):(Dd andop):rest) tokens = reduce ((Dd (And andop comp)):rest)  tokens
 
 {- or operation -}
-reduce decls@((Do orop):rest)       tokens@(OR:_) = shift decls tokens
-reduce decls@((Dk OR):(Do orop):rest)      tokens = shift decls tokens
-reduce ((Dd andop):(Dk OR):(Do orop):rest) tokens = reduce ((Do (Or orop andop)):rest)  tokens
+reduce decls@((Db orop):rest)       tokens@(OR:_) = shift decls tokens
+reduce decls@((Dk OR):(Db orop):rest)      tokens = shift decls tokens
+reduce ((Dd andop):(Dk OR):(Db orop):rest) tokens = reduce ((Db (Or orop andop)):rest)  tokens
 
 {- parentheses -}
 reduce decls@((Dk LPAREN):rest)                 tokens = shift decls tokens
-reduce decls@((Do orop):(Dk LPAREN):rest)       tokens = shift decls tokens
-reduce ((Dk RPAREN):(Do orop):(Dk LPAREN):rest) tokens = reduce ((Dn (Np (Po orop))):rest) tokens
+reduce decls@((Db orop):(Dk LPAREN):rest)       tokens = shift decls tokens
+reduce ((Dk RPAREN):(Db orop):(Dk LPAREN):rest) tokens = reduce ((Dp (Pe orop)):rest) tokens
 
 {- assign -}  -- assignments not allowed across lines
 reduce decls@((Dn (Nd id)):rest)      tokens@(COLON:_) = shift decls tokens
 reduce decls@((Dk COLON):(Dn (Nd id)):rs) tokens@(_:_) = shift decls tokens
-reduce ((Do orop):(Dk COLON):(Dn (Nd name)):rs) tokens = reduce ((Ds (Assn name orop)):rs) tokens
+reduce ((Db orop):(Dk COLON):(Dn (Nd name)):rs) tokens = reduce ((Ds (Assn name orop)):rs) tokens
 
 reduce decls@((Dj join):rest)          tokens@(CONCAT:_) = shift decls tokens
 reduce decls@((Dk CONCAT):(Dj join):rest)         tokens = shift decls tokens
@@ -174,27 +223,28 @@ reduce decls@((Da arth):(Dk CONCAT):(Dj join):rs) tokens = reduce ((Dj (Concat j
  
 {- if -}
 reduce decls@((Dk IF):rest)                      tokens = shift decls tokens
-reduce decls@((Do orop):(Dk IF):rest)            tokens = shift decls tokens
-reduce decls@((Dk THEN):(Do orop):(Dk IF):rest)  tokens = shift decls tokens
-reduce decls@((Dl lines):(Dk THEN):(Do orop):(Dk IF):rest)               tokens = shift decls tokens
-reduce decls@((Dk FI):(Dl lines):(Dk THEN):(Do orop):(Dk IF):rest)       tokens = reduce ((Ds (Si (If orop lines))):rest) tokens
-reduce decls@((Dk OTHER):(Dl lines):(Dk THEN):(Do orop):(Dk IF):rest)    tokens = shift decls tokens
-reduce decls@((Dl b):(Dk OTHER):(Dl a):(Dk THEN):(Do orop):(Dk IF):rest) tokens = shift decls tokens
-reduce decls@((Dk FI):(Dl b):(Dk OTHER):(Dl a):(Dk THEN):(Do t):(Dk IF):rest) tokens = reduce (Ds (Si (IfOther t a b)):rest) tokens
-reduce decls@((Dk ELSE):(Dl a):(Dk THEN):(Do orop):(Dk IF):rest)         tokens = shift decls tokens
-reduce decls@((Ds (Si ifStmt)):(Dk ELSE):(Dl a):(Dk THEN):(Do t):(Dk IF):rest) tokens = reduce (Ds (Si (IfElse t a ifStmt)):rest) tokens
+reduce decls@((Db orop):(Dk IF):rest)            tokens = shift decls tokens
+reduce decls@((Dk THEN):(Db orop):(Dk IF):rest)  tokens = shift decls tokens
+reduce decls@((Dl lines):(Dk THEN):(Db orop):(Dk IF):rest)      tokens = shift decls tokens
+reduce ((Dk FI):(Dl lines):(Dk THEN):(Db orop):(Dk IF):rest)    tokens = reduce ((Ds (Si (If orop lines))):rest) tokens
+reduce decls@((Dk OTHER):(Dl lines):(Dk THEN):(Db orop):(Dk IF):rest)    tokens = shift decls tokens
+reduce decls@((Dl b):(Dk OTHER):(Dl a):(Dk THEN):(Db orop):(Dk IF):rest) tokens = shift decls tokens
+reduce ((Dk FI):(Dl b):(Dk OTHER):(Dl a):(Dk THEN):(Db t):(Dk IF):rest)  tokens = reduce (Ds (Si (IfOther t a b)):rest) tokens
+reduce decls@((Dk ELSE):(Dl a):(Dk THEN):(Db orop):(Dk IF):rest)         tokens = shift decls tokens
+reduce ((Ds (Si ifStmt)):(Dk ELSE):(Dl a):(Dk THEN):(Db t):(Dk IF):rest) tokens = reduce (Ds (Si (IfElse t a ifStmt)):rest) tokens
 
-reduce decls@((Dk OTHER):Dnewline:rest) tokens = reduce ((Dk OTHER):rest) tokens
-reduce decls@((Dk ELSE):Dnewline:rest)  tokens = reduce ((Dk ELSE):rest) tokens
-reduce decls@((Dk FI):Dnewline:rest)    tokens = reduce ((Dk FI):rest) tokens
+reduce ((Dk OTHER):Dnewline:rest) tokens = reduce ((Dk OTHER):rest) tokens
+reduce ((Dk ELSE):Dnewline:rest)  tokens = reduce ((Dk ELSE):rest) tokens
+reduce ((Dk FI):Dnewline:rest)    tokens = reduce ((Dk FI):rest) tokens
 
 {- while -}
 reduce decls@((Dk WHILE):rest)                     tokens = shift decls tokens
-reduce decls@((Do orop):(Dk WHILE):rest)           tokens = shift decls tokens
-reduce decls@((Dk THEN):(Do orop):(Dk WHILE):rest) tokens = shift decls tokens
-reduce decls@((Dl lines):(Dk THEN):(Do orop):(Dk WHILE):rest) tokens = shift decls tokens
-reduce decls@((Dk REPEAT):(Dl lines):(Dk THEN):(Do orop):(Dk WHILE):rest) tokens = reduce (Ds (Sw (While orop lines)):rest) tokens
-reduce decls@((Dk REPEAT):Dnewline:rest)           tokens = reduce ((Dk REPEAT):rest) tokens
+reduce decls@((Db orop):(Dk WHILE):rest)           tokens = shift decls tokens
+reduce decls@((Dk THEN):(Db orop):(Dk WHILE):rest) tokens = shift decls tokens
+reduce decls@((Dl lines):(Dk THEN):(Db orop):(Dk WHILE):rest) tokens = shift decls tokens
+reduce ((Dk REPEAT):(Dl lines):(Dk THEN):(Db orop):(Dk WHILE):rest) tokens = reduce (Ds (Sw (While orop lines)):rest) tokens
+
+reduce ((Dk REPEAT):Dnewline:rest)           tokens = reduce ((Dk REPEAT):rest) tokens
 
 {- comma line combination -}  -- comma cannot be the last character in a line
 reduce decls@((Dl line):rest)          tokens@(COMMA:_) = shift decls tokens
@@ -212,21 +262,24 @@ reduce ((Dn neg):(Dk MINUS):rest) tokens | negatable rest = reduce (Df (Fn neg):
           negatable _           = True
 
 {- promotions -}
-reduce ((Dk (STRING s)):rest) tokens = reduce ((Df (Fs s)):rest)     tokens
-reduce ((Dk NOTHING):rest)    tokens = reduce ((Df (Fnothing)):rest) tokens
-reduce ((Dk TRUE):rest)       tokens = reduce ((Df (Fb True)):rest)  tokens
-reduce ((Dk FALSE):rest)      tokens = reduce ((Df (Fb False)):rest) tokens
-reduce ((Dk (INT int)):rest)  tokens = reduce ((Dn (Ni int)):rest)   tokens
-reduce ((Dk (ID id)):rest)    tokens = reduce ((Dn (Nd id)):rest)    tokens
-reduce ((Dn neg):rest)        tokens = reduce ((Df (Fp neg)):rest)   tokens
-reduce ((Df fact):rest)       tokens = reduce ((Dt (Tf fact)):rest)  tokens
-reduce ((Dt term):rest)       tokens = reduce ((Da (At term)):rest)  tokens
-reduce ((Da arth):rest)       tokens = reduce ((Dj (Ja arth)):rest)  tokens
-reduce ((Dj join):rest)       tokens = reduce ((Dc (Cj join)):rest)  tokens
-reduce ((Dc comp):rest)       tokens = reduce ((Dd (Ac comp)):rest)  tokens
-reduce ((Dd andop):rest)      tokens = reduce ((Do (Oa andop)):rest) tokens
-reduce ((Do orop):rest)       tokens = reduce ((Ds (Se orop)):rest)  tokens
-reduce ((Ds stmt):rest)       tokens = reduce ((Dl (Ls stmt)):rest)  tokens
+reduce ((Dk (ID id)):rest)   tokens = reduce ((Dn (Nd id)):rest)    tokens
+reduce ((Dk (INT int)):rest) tokens = reduce ((Dn (Ni int)):rest)   tokens
+reduce ((Dp paren):rest)     tokens = reduce ((Dn (Np paren)):rest) tokens
+reduce ((De elem):rest)      tokens = reduce ((Dn (Ne elem)):rest)  tokens
+reduce ((Do obj):rest)       tokens = reduce ((Dn (No obj)):rest)   tokens
+reduce ((Dn neg):rest)       tokens = reduce ((Df (Fp neg)):rest)   tokens
+reduce ((Dk NOTHING):rest)   tokens = reduce ((Df (Fnothing)):rest) tokens
+reduce ((Dk (STR s)):rest)   tokens = reduce ((Df (Fs s)):rest)     tokens
+reduce ((Dk TRUE):rest)      tokens = reduce ((Df (Fb True)):rest)  tokens
+reduce ((Dk FALSE):rest)     tokens = reduce ((Df (Fb False)):rest) tokens
+reduce ((Df fact):rest)      tokens = reduce ((Dt (Tf fact)):rest)  tokens
+reduce ((Dt term):rest)      tokens = reduce ((Da (At term)):rest)  tokens
+reduce ((Da arth):rest)      tokens = reduce ((Dj (Ja arth)):rest)  tokens
+reduce ((Dj join):rest)      tokens = reduce ((Dc (Cj join)):rest)  tokens
+reduce ((Dc comp):rest)      tokens = reduce ((Dd (Ac comp)):rest)  tokens
+reduce ((Dd andop):rest)     tokens = reduce ((Db (Oa andop)):rest) tokens
+reduce ((Db orop):rest)      tokens = reduce ((Ds (Se orop)):rest)  tokens
+reduce ((Ds stmt):rest)      tokens = reduce ((Dl (Ls stmt)):rest)  tokens
 
 {- base cases -}
 reduce decls@[Dl _] []      = return decls
@@ -238,8 +291,8 @@ demoteLast (x:xs)  = (demote x):xs
 demoteLast []      = []
 
 demote :: Decl -> Decl
-demote (Ds (Se orop))  = demote (Do orop)
-demote (Do (Oa andop)) = demote (Dd andop)
+demote (Ds (Se orop))  = demote (Db orop)
+demote (Db (Oa andop)) = demote (Dd andop)
 demote (Dd (Ac comp))  = demote (Dc comp)
 demote (Dc (Cj join))  = demote (Dj join)
 demote (Dj (Ja arth))  = demote (Da arth)

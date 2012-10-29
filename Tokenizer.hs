@@ -11,7 +11,7 @@ import Failure
 
 data Token = INT Integer
            | ID String
-           | STRING String
+           | STR String
            | TRUE | FALSE
            | NOTHING
            | DOT
@@ -87,7 +87,7 @@ getOneToken str@(x:xs)
     where getIdOrKeyword = filterKeyword . getId
 
 getStr :: String -> (Failable Token, String)
-getStr ('\'':rest)       = (return (STRING ""), rest)
+getStr ('\'':rest)       = (return (STR ""), rest)
 getStr ('\\':'a':rest)   = prepend '\a' (getStr rest)
 getStr ('\\':'b':rest)   = prepend '\b' (getStr rest)
 getStr ('\\':'f':rest)   = prepend '\f' (getStr rest)
@@ -113,7 +113,7 @@ getStr (x:rest)          = prepend x    (getStr rest)
 
 prepend :: Char -> (Failable Token, String) -> (Failable Token, String)
 prepend char (token, rest) = (newToken, rest)
-        where prependToToken (STRING s) = STRING (char:s)
+        where prependToToken (STR s) = STR (char:s)
               newToken = prependToToken `liftM` token
 
 getNum :: String -> (Failable Token, String)
