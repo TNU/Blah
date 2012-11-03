@@ -2,3 +2,24 @@
 15
 True
 False
+'This is a string?'
+'\'\\\'\\'
+'New\nLine\fWord\bld\r'
+'This continues
+and \o\w\o\i\e\s'
+'\047\x5F\x7d\u300e』\256
+\248\u314G'
+[]
+['some\n\t\\\'\vth ings\b\xa9\nare\fgood\0\r']
+[True and '',
+113, 23 -
+-12 * -2
+,51!=84]
+[	[
+],      True,['Nested']
+,[1,       2,'[]',
+4,5]]
+[2 * (
+25 -
+15
+), 12]

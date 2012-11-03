@@ -13,3 +13,8 @@ a: a and
 8 or
 4
 a
+[''] or 5 + 6
+[] and 'hello'
+'' and 'maybe' or 'not'
+b: ''
+b or b & 'you'

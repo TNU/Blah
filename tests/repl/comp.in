@@ -36,3 +36,24 @@ a > 7 >= 8 <7
 8 = c
 False = False
 False != 0
+3 = 5 = False
+'String Comparisons'
+'abc' < 'def'
+'goodday' = 'good'
+'' >= '!impressive!'
+'New' <= 'New'
+'\xA9' = '\u00a9'
+'List Comparisons'
+[1] < [2]
+[24] > []
+[] >= []
+[12, 23, 34] >= [12, 23]
+[12, 23, 34] <= [12, 23]
+[12, 'abc', 23] <= [12, 'abd', 1]
+[12, 23, 34] < [12, 23]
+[12, [12, 2 + 3, True], 'hi'] =
+[12, [12, 2 + 3, True], 'hi']
+[12, [12, 2 + 3, True], 'hi'] =
+[12, [12, True], 'hi']
+[12, [12, 2 + 3, ['her']], 'him'] >
+[12, [12, 2 + 3, ['him']], 'her']

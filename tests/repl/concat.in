@@ -1,0 +1,10 @@
+'hello' & ' world'
+'hello
+' & '\n wold'
+123 & 431 + 5 * 5 & -789
+'hi' & 'll' < 'bill'
+'hi' & ('ll' < 'bill')
+(True & True = True) = False
+'What\'s here? -' & Nothing
+['some', 1, False, Nothing, ['hi']] & 'not a good idea'
+1 & Nothing & 'hi' & []

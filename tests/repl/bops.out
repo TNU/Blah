@@ -1,3 +1,6 @@
 <eval> comparison of "False" and "42" is not supported
 <eval> comparison of "42" and "True" is not supported
 <eval> comparison of "54" and "True" is not supported
+<eval> comparison of "14" and "abdef" is not supported
+<eval> comparison of "12" and "12" is not supported
+<eval> comparison of "3" and "3" is not supported

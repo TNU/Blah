@@ -11,4 +11,10 @@ a: 22 + 6 * -4
 a
 d: a * (b - c) + c
 d
+c_str: 'not a c string', c_str
+_MACRO_: False
+_MACRO_
+num_14_Person: 14 + 86
+num_14_Person
+c_str
 
