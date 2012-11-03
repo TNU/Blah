@@ -70,6 +70,7 @@ runExpr expr = runErrorT (evalExpr expr) >>= return . liftM snd
 
 testExpr :: Expr -> RuntimeState (Either Failure Bool)
 testExpr expr = runErrorT (evalExpr expr >>= toBool . snd)
+
 passTo :: RuntimeState a -> (a -> RuntimeAction b) -> RuntimeAction b
 passTo value action doRest = value >>= \x -> action x doRest
 

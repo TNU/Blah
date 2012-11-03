@@ -12,34 +12,43 @@ shortCircuit: (0 and 1 or 4 and 5) == 5
 concat: "the" # " value of " # varName # " is " # 13 * 34 # 14.23 " ."
 comment: "the" ++ "value of " ++ varName ++ "is " ++ 12 - 243 ++ 12
 
-to find `gcd_of @a and @b:
+to find .gcd_of `a .and `b do
     if b > 0 then
-        return gcd_of b@a (@a mod @b)@b
+        return `gcd_of a[32] `and (b `mod a)
     else
         return a
     fi
-
-    while wasting_time then
-        have_fun
-    repeat
 done
 
-to `add_person to @database with @name, @address, @phone:
-    if is_valid @name and is_valid @address:
-        service: get_service_to @database
-        results: service.workers.run "SELECT * from tables"@sql_query
+gcd_of: a b do
+    if b > 0 then
+        return gcd_of(a, mod(a, b))
+    otherwise
+        return a
+    fi
+done
+
+
+
+
+to `add_person to @database with @name, @address, @phone do
+    if `is_valid @name and `is_valid @address:
+        service: get_service_to @database @options
+        results: service .workers .run "SELECT * from tables"@sql_query
 
         for each result in results
 
         close @service
     fi
-ot
+done
 
-convertToNumber: with number, radix do
-    if name @is_a_valid_name and address @is_a_valid_address then
+
+convertToNumber: with @number, @radix do
+    if name @is_a_valid_name and address is_a_valid_address then
         for each result in results:
-            @print result
-            html:  (@compile result @to_template "list.template")
+            print @result
+            html:  compile @result with "list.template"@template
+            insert number@key result@value into @result_set
         rof
     fi
 
@@ -50,7 +59,7 @@ add_person: with name, phone, address, database do
     Nothing
 done
 
-to calculate `tip for @payment in a @type restaurant:
+to calculate .tip_for `payment in a `type restaurant:
     if type = 'high end' then
         return 0.15 * payment
     else if type = 'medium' then
@@ -69,3 +78,48 @@ else mood = 'sad' then
 otherwise
     say @Nothing
 fi
+
+do_longlong_function_and_do_something_extra argument_one@formal_argment_one
+					    more_arguments@formal_argument_two
+					    blah_blah_as@something
+
+thisIsALongChain.
+      ofProperty.
+           names.
+        and_some.
+           other.
+           stuff: 6
+
+to `authenticate_user do
+    num_tries: 0
+
+    username: `ask "Please Enter Your Username: "
+    password: `ask "Please Enter Your Password: "
+
+    while username `and password `are_valid then
+
+        num_tries: num_tries + 1
+
+        if num_tries > 5 then
+            `sleep 5 `seconds
+            num_tries: 0
+        fi
+
+        hashed_password: `hash password
+    repeat
+done
+
+to test if .username `and .password `are_valid do
+    return `hashed password = `value_for username `in passdb
+done
+
+
+to find `fib_at .i do
+    if i = 0 then
+        return 0
+    else if i = 1 then
+        return 1
+    otherwise
+        return "12" & `fib_at (i-1) + `fib_at (i-2)
+    fi
+done

@@ -18,7 +18,9 @@ import Control.Monad (liftM, liftM2, join)
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
 
+import qualified Data.Foldable as Fold
 import qualified Data.Map as Map
+import qualified Data.Sequence as Seq
 
 import Failure
 import Parser
@@ -26,14 +28,13 @@ import Parser
 data Value = Vi Integer
            | Vb Bool
            | Vs String
+           | Vl (Seq.Seq Value)
+           | Vc Integer
            | Vnothing
-           deriving (Eq)
+           deriving (Ord, Eq)
 
 instance Show Value where
-    show (Vi int)  = show int
-    show (Vb bool) = show bool
-    show (Vs string) = string
-    show Vnothing  = "Nothing"
+    show = str
 
 type Scope           = Map.Map String Value
 type RuntimeState    = State (Scope, String)
@@ -88,9 +89,17 @@ doComp op a b = do (old, x, _)  <- a
                    return (new, y, Vb new)
 
 ltOp :: Value -> Value -> RuntimeFailable Bool
-ltOp (Vi x) (Vi y) = return (x < y)
-ltOp (Vs x) (Vs y) = return (x < y)
-ltOp x      y      = typeFail2 "comparison" x y
+ltOp (Vi x) (Vi y)     = return (x < y)
+ltOp (Vs x) (Vs y)     = return (x < y)
+ltOp a@(Vl x) b@(Vl y) = allTrue [allLte, notLonger, notEqual]
+    where false     = return False
+          true      = return True
+          eachGt    = Seq.zipWith ltOp y x
+          allLte    = not `liftM` (Fold.foldr (liftM2 (||)) false eachGt)
+          notLonger = return (Seq.length x <= Seq.length y)
+          notEqual  = not `liftM` eqOp a b
+          allTrue   = foldr (liftM2 (&&)) true
+ltOp x      y       = typeFail2 "comparison" x y
 
 eqOp :: Value -> Value -> RuntimeFailable Bool
 eqOp x y = return (x == y)
@@ -127,20 +136,36 @@ evalFact :: Factor -> RuntimeFailable Value
 evalFact (Fnothing) = return Vnothing
 evalFact (Fb x)     = return . Vb $ x
 evalFact (Fs x)     = return . Vs $ x
+evalFact (Fl x)     = evalList x
 evalFact (Fp x)     = evalNeg x
 evalFact (Fn x)     = (evalNeg x) >>= negateVal
-   where negateVal (Vi x) = return . Vi . negate $ x
-         negateVal x      = typeFail1 "negation" x
+    where negateVal (Vi x) = return . Vi . negate $ x
+          negateVal x      = typeFail1 "negation" x
+
+evalList :: List -> RuntimeFailable Value
+evalList Lempty         = return . Vl $ Seq.empty
+evalList (Lone x)       = (Vl . Seq.singleton . snd) `liftM` evalExpr x
+evalList (Lcons list x) = applyBinOp append (evalExpr x) (evalList list)
+    where append (b, val) (Vl list) = return . Vl $ (list Seq.|> val)
 
 {- Neg -}
 evalNeg :: Neg -> RuntimeFailable Value
 evalNeg (Ni x) = return . Vi $ x
 evalNeg (Nd x) = getVar x
+evalNeg (Nc x) = evalCall x
 evalNeg (Np x) = evalParen x
+
+evalCall :: Call -> RuntimeFailable Value
+evalCall (Call neg args) = evalNeg neg
+
+{- Args -}
+evalArgs :: Args -> RuntimeFailable [Value]
+evalArgs Rempty = return []
+evalArgs (Rcons args expr) = liftM2 (:) (snd `liftM` evalExpr expr) (evalArgs args)
 
 {- Paren -}
 evalParen :: Paren -> RuntimeFailable Value
-evalParen (Pe x) = evalOrop x >>= return . snd
+evalParen (Pe x) = snd `liftM` evalExpr x
 
 {- State Modifiers -}
 getInput :: RuntimeState String
@@ -166,7 +191,40 @@ toBool (Vi x)   = return True
 toBool (Vb x)   = return x
 toBool (Vs "")  = return False
 toBool (Vs x)   = return True
+toBool (Vl x)   = return . not . Seq.null $ x
 toBool Vnothing = return False
+
+str :: Value -> String
+str Vnothing  = "Nothing"
+str (Vi int)  = show int
+str (Vb bool) = show bool
+str (Vs string) = string
+str (Vl list) = reprList list
+
+repr :: Value -> String
+repr Vnothing  = "Nothing"
+repr (Vi int)  = show int
+repr (Vb bool) = show bool
+repr (Vl list) = reprList list
+repr (Vs string) = "'" ++ concatMap esc string ++ "'"
+    where esc '\a' = "\\a"
+          esc '\b' = "\\b"
+          esc '\f' = "\\f"
+          esc '\n' = "\\n"
+          esc '\r' = "\\r"
+          esc '\t' = "\\t"
+          esc '\v' = "\\v"
+          -- " is not escaped
+          esc '\'' = "\\\'"
+          esc '\\' = "\\\\"
+          esc '\0' = "\\0"
+          esc x    = [x]
+
+reprList :: Seq.Seq Value -> String
+reprList seq = "[" ++ reprElems ++ "]"
+    where reprElems = Fold.concat (Seq.mapWithIndex showOne seq)
+          showOne 0 x = repr x
+          showOne _ x = ", " ++ repr x
 
 {- Utility Functions -}
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
@@ -183,4 +241,10 @@ typeFail2 opName x y = evalFail $ opName ++ " of \""
 
 {- New Runtime -}
 newRuntime :: String -> (Scope, String)
-newRuntime input = (Map.empty, input)
+newRuntime input = (defaultVars, input)
+
+defaultVars :: Map.Map String Value
+defaultVars = Map.fromList [
+    ]
+
+
