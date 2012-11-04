@@ -4,10 +4,11 @@ module Tokenizer (
 ) where
 
 import qualified Data.Map as Map
+
 import Control.Monad (liftM, liftM2)
 import Data.Char (isDigit, isAlpha, isOctDigit, isHexDigit, digitToInt, chr)
 
-import Failure
+import State
 
 data Token = INT Integer
            | ID String
@@ -48,89 +49,92 @@ keywords = Map.fromList [
         ("repeat",    REPEAT)
     ]
 
-tokenize :: String -> (Failable [Token], String)
-tokenize [] = (return [], "")
-tokenize (x:xs)
-    | isNewline x   = (return [], xs)
-    | isSpace x     = tokenize xs
-tokenize str = (curTokens, restLines)
-    where (token, rest) = getOneToken str
-          (restToks, restLines) = tokenize rest
-          curTokens = liftM2 (:) token restToks
+tokenize :: Runtime [Token]
+tokenize = do
+    isEof <- isEOF
+    if isEof
+    then return []
+    else do line <- readLine
+            tokenizeLineStr line
 
-getOneToken :: String -> (Failable Token, String)
-getOneToken ('[':xs)     = (return LBRA,   xs)
-getOneToken (']':xs)     = (return RBRA,   xs)
-getOneToken ('+':xs)     = (return PLUS,   xs)
-getOneToken ('-':xs)     = (return MINUS,  xs)
-getOneToken ('*':xs)     = (return MULT,   xs)
-getOneToken ('/':xs)     = (return DIV,    xs)
-getOneToken ('(':xs)     = (return LPAREN, xs)
-getOneToken (')':xs)     = (return RPAREN, xs)
-getOneToken (':':xs)     = (return COLON,  xs)
-getOneToken ('&':xs)     = (return CONCAT, xs)
-getOneToken ('<':'=':xs) = (return TLTE,   xs)
-getOneToken ('>':'=':xs) = (return TGTE,   xs)
-getOneToken ('!':'=':xs) = (return TNE,    xs)
-getOneToken ('<':xs)     = (return TLT,    xs)
-getOneToken ('=':xs)     = (return TEQ,    xs)
-getOneToken ('>':xs)     = (return TGT,    xs)
-getOneToken ('.':xs)     = (return DOT,    xs)
-getOneToken (',':xs)     = (return COMMA,  xs)
+tokenizeLineStr :: String -> Runtime [Token]
+tokenizeLineStr [] = return []
+tokenizeLineStr (x:xs)
+    | isNewline x   = return []
+    | isSpace x     = tokenizeLineStr xs
+tokenizeLineStr str = getOneToken str
 
-getOneToken ('\'':xs)    = (getStr  xs)
+addToken :: Token -> String -> Runtime [Token]
+addToken token rest = (token:) `liftM` tokenizeLineStr rest
+
+getOneToken :: String -> Runtime [Token]
+getOneToken ('[':xs)     = addToken LBRA    xs
+getOneToken (']':xs)     = addToken RBRA    xs
+getOneToken ('+':xs)     = addToken PLUS    xs
+getOneToken ('-':xs)     = addToken MINUS   xs
+getOneToken ('*':xs)     = addToken MULT    xs
+getOneToken ('/':xs)     = addToken DIV     xs
+getOneToken ('(':xs)     = addToken LPAREN  xs
+getOneToken (')':xs)     = addToken RPAREN  xs
+getOneToken (':':xs)     = addToken COLON   xs
+getOneToken ('&':xs)     = addToken CONCAT  xs
+getOneToken ('<':'=':xs) = addToken TLTE    xs
+getOneToken ('>':'=':xs) = addToken TGTE    xs
+getOneToken ('!':'=':xs) = addToken TNE     xs
+getOneToken ('<':xs)     = addToken TLT     xs
+getOneToken ('=':xs)     = addToken TEQ     xs
+getOneToken ('>':xs)     = addToken TGT     xs
+getOneToken ('.':xs)     = addToken DOT     xs
+getOneToken (',':xs)     = addToken COMMA   xs
+
+getOneToken ('\'':xs)    = getStr xs
 
 getOneToken str@(x:xs)
-    | isDigit x     = (getNum str)
-    | isId x        = (getIdOrKeyword str)
-    where getIdOrKeyword = filterKeyword . getId
+    | isDigit x     = getNum str
+    | isId x        = getId str >>= filterKeyword
 
-getOneToken (x:xs)  = (tokenizeFail $ "umatched token " ++ (show x), xs)
+getOneToken (x:xs)  = tokenizeFail $ "umatched token " ++ (show x)
 
-getStr :: String -> (Failable Token, String)
-getStr ('\'':rest)       = (return (STR ""), rest)
-getStr ('\\':'a':rest)   = prepend '\a' (getStr rest)
-getStr ('\\':'b':rest)   = prepend '\b' (getStr rest)
-getStr ('\\':'f':rest)   = prepend '\f' (getStr rest)
-getStr ('\\':'n':rest)   = prepend '\n' (getStr rest)
-getStr ('\\':'r':rest)   = prepend '\r' (getStr rest)
-getStr ('\\':'t':rest)   = prepend '\t' (getStr rest)
-getStr ('\\':'v':rest)   = prepend '\v' (getStr rest)
-getStr ('\\':'\'':rest)  = prepend '\'' (getStr rest)
-getStr ('\\':'\"':rest)  = prepend '\"' (getStr rest)
-getStr ('\\':'\\':rest)  = prepend '\\' (getStr rest)
+getNum :: String -> Runtime [Token]
+getNum str = addToken (INT (read numStr)) rest
+    where (numStr, rest) = span isDigit str
+
+getId :: String -> Runtime [Token]
+getId (x:xs) = addToken (ID (x:idTail)) rest
+    where (idTail, rest) = span isRestId xs
+          isRestId x = isId x || isDigit x
+
+filterKeyword :: [Token] -> Runtime [Token]
+filterKeyword ((def@(ID name)):rest) = return (newToken:rest)
+    where newToken = Map.findWithDefault def name keywords
+
+getStr :: String -> Runtime [Token]
+getStr ('\'':rest)       = addToken (STR "") rest
+getStr ('\\':'a':rest)   = addChar '\a' rest
+getStr ('\\':'b':rest)   = addChar '\b' rest
+getStr ('\\':'f':rest)   = addChar '\f' rest
+getStr ('\\':'n':rest)   = addChar '\n' rest
+getStr ('\\':'r':rest)   = addChar '\r' rest
+getStr ('\\':'t':rest)   = addChar '\t' rest
+getStr ('\\':'v':rest)   = addChar '\v' rest
+getStr ('\\':'\'':rest)  = addChar '\'' rest
+getStr ('\\':'\"':rest)  = addChar '\"' rest
+getStr ('\\':'\\':rest)  = addChar '\\' rest
 getStr ('\\':a:b:c:rest)
-    | all isOctDigit [a,b,c] = prepend (charOf [a,b,c]) (getStr rest)
-    where charOf = chr . parseInt 8
+    | all isOctDigit [a,b,c] = addChar (chr (parseInt 8 [a,b,c])) rest
 getStr ('\\':'x':a:b:rest)
-    | all isHexDigit [a,b] = prepend (charOf [a,b]) (getStr rest)
-    where charOf = chr . parseInt 16
+    | all isHexDigit [a,b] = addChar (chr (parseInt 16 [a,b])) rest
 getStr ('\\':'u':a:b:c:d:rest)
-    | all isHexDigit [a,b,c,d] = prepend (charOf [a,b,c,d]) (getStr rest)
-    where charOf = chr . parseInt 16
-getStr ('\\':'0':rest)   = prepend '\0' (getStr rest)
-getStr (x:rest)          = prepend x    (getStr rest)
-    where (restStr, untokenized) = getStr rest
-getStr []                = (tokenizeFail "unterminated string", [])
-
-prepend :: Char -> (Failable Token, String) -> (Failable Token, String)
-prepend char (token, rest) = (newToken, rest)
-    where prependToToken (STR s) = STR (char:s)
-          newToken = prependToToken `liftM` token
+    | all isHexDigit [a,b,c,d] = addChar (chr (parseInt 16 [a,b,c,d])) rest
+getStr ('\\':'0':rest)   = addChar '\0' rest
+getStr (x:rest)          = addChar x    rest
+getStr [] = do isEof <- isEOF
+               if isEof then tokenizeFail $ "unterminated string"
+                        else readLine >>= addChar '\n'
 
 parseInt :: Int -> String -> Int
 parseInt radix = foldl (\acc x -> acc * radix + digitToInt x) 0
 
-getNum :: String -> (Failable Token, String)
-getNum str = (return (INT (read numStr)), rest)
-    where (numStr, rest) = span isDigit str
-
-getId :: String -> (Failable Token, String)
-getId (x:xs) = (return (ID (x:idTail)), rest)
-    where (idTail, rest) = span isRestId xs
-          isRestId x = isId x || isDigit x
-
-filterKeyword :: (Failable Token, String) -> (Failable Token, String)
-filterKeyword (token, input) = (newToken, input)
-    where newToken = getNew `liftM` token
-          getNew def@(ID name) = Map.findWithDefault def name keywords
+addChar :: Char -> String -> Runtime [Token]
+addChar char rest = getStr rest >>= prependWith char
+    where prependWith c ((STR str):ts) = return ((STR (c:str)):ts)

@@ -1,35 +1,51 @@
 module Coder (
-    repl
+    runRepl
 ) where
 
 import Control.Monad.Trans.State (evalState)
+import Control.Monad.Trans.Error (catchError)
 
-import Failure
+import qualified Data.Map as Map
+
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
-import Eval (newRuntime, getVar, setVar, getInput, updateInput)
-import Runner (RuntimeIO, runLine, showStr)
+import Value (Value(..), toStr)
+import State (Runtime, Scope, run, newRuntime, showLine, readLine, isEOF)
+import Runner (runLine)
 
-repl :: IO ()
-repl = getContents >>= replStr
+runRepl :: IO ()
+runRepl = run repl (newRuntime defaultVars) >> return ()
 
-replStr :: String -> IO ()
-replStr input = evalState replRest (newRuntime input)
+repl :: Runtime ()
+repl = replRest
 
-replRest :: RuntimeIO ()
-replRest = replLine (return [])
+replRest :: Runtime ()
+replRest = replLine []
 
-replLine :: Either Failure [Decl] -> RuntimeIO ()
-replLine (Left error)             = showStr error replRest
-replLine (Right [(Dl line)])      = runLine line replRest
-replLine (Right line@((Dl _):_))  = replLine (Right (Dnewline:line))
-replLine (Right unmatched) = do
-        input <- getInput
-        case (unmatched, input) of
-            ([], []) -> return . return $ ()
-            (xs, []) -> return . replError $ "unmatched decls at end of input"
-            _     -> do let (tokens, restInput) = tokenize input
-                            decls = tokens >>= parse unmatched
-                        updateInput restInput
-                        replLine (extract decls)
+replLine :: [Decl] -> Runtime ()
+
+replLine [(Dl line)]  = replError (runLine line replShowLine) >> replRest
+    where replError state = state `catchError` showLine
+          replShowLine = showLine . toStr
+
+replLine (line@((Dl _):_)) = replLine (Dnewline:line)
+
+replLine unmatched = do
+        isEof <- isEOF
+        if isEof
+        then if null unmatched
+             then return ()
+             else replFail "unmatched decls at end of input"
+        else parseError parseRestLine >>= replLine
+    where parseRestLine = tokenize >>= parse unmatched
+          parseError state = state `catchError` handleError
+          handleError error = showLine error >> return []
+
+
+
+defaultVars :: Scope
+defaultVars = Map.empty
+
+replFail :: String -> Runtime ()
+replFail = showLine . ("<repl> " ++)
 

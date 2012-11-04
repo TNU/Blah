@@ -1,78 +1,53 @@
 module Runner (
-    RuntimeIO,
     runLine,
-    showStr,
+    doNothing,
 ) where
 
-import Control.Monad (liftM)
+import Control.Monad (liftM, liftM2)
 import Control.Monad.Trans.Error (runErrorT)
 
-import Failure
+import qualified Data.Map as Map
+
 import Parser
+import Value
+import State
 import Eval
 
-type RuntimeIO a     = RuntimeState (IO a)
-type RuntimeAction a = RuntimeIO a -> RuntimeIO a
-
 {- Run Functions -}
-runLine :: Line -> RuntimeAction a
-runLine (Ls stmt)       = runStmt stmt
-runLine (Lm line stmt)  = runLine line . runStmt stmt
+runLine :: Line -> (Value -> Runtime ()) -> Runtime ()
+runLine (Ls stmt)        sep = runStmt stmt sep
+runLine (Lm line stmt)   sep = runLine line sep >> runStmt stmt sep
 
-runStmt :: Stmt -> RuntimeAction a
-runStmt (Se expr)        = runExpr expr `passTo` showValOrErr
-runStmt (Assn name expr) = runExpr expr `passTo` (runAssign name)
-runStmt (Si ifStmt)      = runIfStmt ifStmt
-runStmt (Sw whileStmt)   = runWhileStmt whileStmt
+runStmt :: Stmt -> (Value -> Runtime ()) -> Runtime ()
+runStmt (Se expr)        sep = runExpr expr >>= sep
+runStmt (Assn name expr) sep = runExpr expr >>= runAssign name sep
+runStmt (Si ifStmt)      sep = runIfStmt ifStmt sep
+runStmt (Sw whileStmt)   sep = runWhileStmt whileStmt sep
 
-runAssign :: String -> Either Failure Value -> RuntimeAction a
-runAssign name (Right val)  = runErrorT (setVar name val) `passTo` showOnlyErr
-runAssign name (Left error) = showStr error
+runAssign :: String -> (Value -> Runtime ()) -> Value -> Runtime ()
+runAssign name sep value = setVar name value >> doNothing
 
-runIfStmt :: IfStmt -> RuntimeAction a
-runIfStmt (If test line) = testExpr test `passTo` \result ->
-        case result of (Right True)  -> runLine line
-                       (Right False) -> id
-                       (Left error)  -> showStr error
-runIfStmt (IfOther test ifLines otherLine) = testExpr test `passTo` \result ->
-        case result of (Right True)  -> runLine ifLines
-                       (Right False) -> runLine otherLine
-                       (Left error)  -> showStr error
-runIfStmt (IfElse test ifLines elseIfStmt) = testExpr test `passTo` \result ->
-        case result of (Right True)  -> runLine ifLines
-                       (Right False) -> runIfStmt elseIfStmt
-                       (Left error)  -> showStr error
+runIfStmt :: IfStmt -> (Value -> Runtime ()) -> Runtime ()
+runIfStmt (If test line) sep = testExpr test >>= decider
+    where decider True  = runLine line sep
+          decider False = doNothing
+runIfStmt (IfOther test ifLines otherLine) sep = testExpr test >>= decider
+    where decider True  = runLine ifLines   sep
+          decider False = runLine otherLine sep
+runIfStmt (IfElse test ifLines elseIfStmt) sep = testExpr test >>= decider
+    where decider True  = runLine ifLines      sep
+          decider False = runIfStmt elseIfStmt sep
 
-runWhileStmt :: WhileStmt -> RuntimeAction a
-runWhileStmt stmt@(While test lines) = testExpr test `passTo` \result ->
-        case result of (Right True)  -> runLine lines . runWhileStmt stmt
-                       (Right False) -> id
-                       (Left error)  -> showStr error
+runWhileStmt :: WhileStmt -> (Value -> Runtime ()) -> Runtime ()
+runWhileStmt stmt@(While test lines) sep = testExpr test >>= decider
+    where decider True  = runLine lines sep >> runWhileStmt stmt sep
+          decider False = doNothing
 
-{- Show Functions -}
-showValOrErr :: Either Failure Value -> RuntimeAction a
-showValOrErr (Right val)  = showRaw  val
-showValOrErr (Left error) = showStr error
+runExpr :: Expr -> Runtime Value
+runExpr expr = snd `liftM` evalExpr expr
 
-showOnlyErr :: Either Failure () -> RuntimeAction a
-showOnlyErr (Right ()) = id
-showOnlyErr (Left error) = showStr error
+testExpr :: Expr -> Runtime Bool
+testExpr expr = fst `liftM` evalExpr expr
 
-showRaw :: (Show t) => t -> RuntimeAction a
-showRaw = showStr . show
-
-showStr :: String -> RuntimeAction a
-showStr = doIO . putStrLn
-
-{- Expr -}
-runExpr :: Expr -> RuntimeState (Either Failure Value)
-runExpr expr = runErrorT (evalExpr expr) >>= return . liftM snd
-
-testExpr :: Expr -> RuntimeState (Either Failure Bool)
-testExpr expr = runErrorT (evalExpr expr >>= toBool . snd)
-
-passTo :: RuntimeState a -> (a -> RuntimeAction b) -> RuntimeAction b
-passTo value action doRest = value >>= \x -> action x doRest
-
-doIO :: IO b -> RuntimeAction a
-doIO action = (>>= return . (action >>))
+doNothing :: Runtime ()
+doNothing = return ()

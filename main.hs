@@ -1,3 +1,3 @@
 import Coder
 
-main = repl
+main = runRepl

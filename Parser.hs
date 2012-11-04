@@ -22,7 +22,7 @@ module Parser (
 import Data.Functor.Identity
 import Control.Monad.Trans.Error
 
-import Failure
+import State
 import Tokenizer
 
 -- decls are showable and equable for testing
@@ -142,15 +142,15 @@ data Call = Call Neg Args
 data Paren = Pe OrOp
            deriving (Show, Eq)
 
-parse :: [Decl] -> [Token] -> Failable [Decl]
+parse :: [Decl] -> [Token] -> Runtime [Decl]
 parse []    = shift []
 parse decls = reduce (demoteLast decls)
 
-shift :: [Decl] -> [Token] -> Failable [Decl]
+shift :: [Decl] -> [Token] -> Runtime [Decl]
 shift decls (tok:tokens) = reduce ((Dk tok):decls) tokens
 shift decls []           = return decls
 
-reduce :: [Decl] -> [Token] -> Failable [Decl]
+reduce :: [Decl] -> [Token] -> Runtime [Decl]
 
 {- object -}
 reduce decls@((Dk (STR s)):rest)                 tokens@(DOT:_) = shift decls tokens
@@ -349,7 +349,7 @@ demote (Dj (Ja arth))  = demote (Da arth)
 demote (Da (At term))  = demote (Dt term)
 demote (Dt (Tf fact))  = demote (Df fact)
 demote x               = x
-
+{-
 -- testing
 parseStr :: String -> Either Failure [Decl]
-parseStr str = extract (fst (tokenize str) >>= parse [])
+parseStr str = extract (fst (tokenize str) >>= parse [])-}
