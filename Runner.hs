@@ -1,6 +1,5 @@
 module Runner (
     runLine,
-    doNothing,
 ) where
 
 import Control.Monad (liftM, liftM2)

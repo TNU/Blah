@@ -8,6 +8,7 @@ import qualified Data.Map as Map
 import Control.Monad (liftM, liftM2)
 import Data.Char (isDigit, isAlpha, isOctDigit, isHexDigit, digitToInt, chr)
 
+import Failure
 import State
 
 data Token = INT Integer

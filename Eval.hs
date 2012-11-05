@@ -10,9 +10,11 @@ import Control.Monad.Trans.Error
 import qualified Data.Foldable as Fold
 import qualified Data.Sequence as Seq
 
-import Parser
 import Value
+import Func
+import Failure
 import State
+import Parser
 
 type Expr = OrOp
 
@@ -128,7 +130,10 @@ evalNeg (Nc x) = evalCall x
 evalNeg (Np x) = evalParen x
 
 evalCall :: Call -> Runtime Value
-evalCall (Call neg args) = evalNeg neg
+evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
+    where callFunc (Vf name) vals = getSysFunc name >>= runFunc vals
+          callFunc x         _    = typeFail1 "function call" x
+          runFunc vals func = runSystemFunc func vals
 
 {- Args -}
 evalArgs :: Args -> Runtime [Value]

@@ -10,11 +10,13 @@ import qualified Data.Map as Map
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
 import Value (Value(..), toStr)
-import State (Runtime, Scope, run, newRuntime, showLine, readLine, isEOF)
+import Func (basicFuncs, basicFuncVars)
+import State
 import Runner (runLine)
 
 runRepl :: IO ()
-runRepl = run repl (newRuntime defaultVars) >> return ()
+runRepl = run repl replRuntime >> return ()
+    where replRuntime = newRuntime defaultVars systemFuncMap
 
 repl :: Runtime ()
 repl = replRest
@@ -41,10 +43,11 @@ replLine unmatched = do
           parseError state = state `catchError` handleError
           handleError error = showLine error >> return []
 
-
-
 defaultVars :: Scope
-defaultVars = Map.empty
+defaultVars = basicFuncVars
+
+systemFuncMap :: SystemFuncMap
+systemFuncMap = basicFuncs
 
 replFail :: String -> Runtime ()
 replFail = showLine . ("<repl> " ++)

@@ -12,7 +12,7 @@ data Value = Vi Integer
            | Vb Bool
            | Vs String
            | Vl (Seq.Seq Value)
-           | Vc Integer
+           | Vf String
            | Vnothing
            deriving (Ord, Eq)
 
@@ -27,6 +27,7 @@ toBool (Vb x)   = x
 toBool (Vs "")  = False
 toBool (Vs x)   = True
 toBool (Vl x)   = not . Seq.null $ x
+toBool (Vf _)   = True
 toBool Vnothing = False
 
 toStr :: Value -> String
@@ -35,12 +36,14 @@ toStr (Vi int)    = show int
 toStr (Vb bool)   = show bool
 toStr (Vs string) = string
 toStr (Vl list)   = toReprList list
+toStr (Vf name)   = name ++ "(..)"
 
 toRepr :: Value -> String
 toRepr Vnothing  = "Nothing"
 toRepr (Vi int)  = show int
 toRepr (Vb bool) = show bool
 toRepr (Vl list) = toReprList list
+toRepr (Vf name) = name ++ "(..)"
 toRepr (Vs string) = "'" ++ concatMap esc string ++ "'"
     where esc '\a' = "\\a"
           esc '\b' = "\\b"

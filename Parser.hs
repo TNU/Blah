@@ -22,6 +22,7 @@ module Parser (
 import Data.Functor.Identity
 import Control.Monad.Trans.Error
 
+import Failure
 import State
 import Tokenizer
 
@@ -207,6 +208,7 @@ reduce decls@((Dk LPAREN):(Dn neg):rest)                       tokens = reduce (
 reduce decls@((Dr args):(Dk LPAREN):(Dn neg):rest)             tokens = shift decls tokens
 reduce decls@((Db orop):(Dr args):(Dk LPAREN):(Dn neg):rest)   tokens = shift decls tokens
 reduce decls@((Dk COMMA):(Db orop):(Dr args):(Dk LPAREN):(Dn neg):rest)  tokens = reduce ((Dr (Rcons args orop)):(Dk LPAREN):(Dn neg):rest) tokens
+reduce decls@((Dk RPAREN):(Dk LPAREN):(Dn neg):rest)                     tokens = reduce ((Dh (Call neg Rempty)):rest) tokens
 reduce decls@((Dk RPAREN):(Db orop):(Dr args):(Dk LPAREN):(Dn neg):rest) tokens = reduce ((Dh (Call neg (Rcons args orop))):rest) tokens
 
 {- terms -}
