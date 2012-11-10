@@ -42,11 +42,5 @@ runWhileStmt stmt@(While test lines) sep = testExpr test >>= decider
     where decider True  = runLine lines sep >> runWhileStmt stmt sep
           decider False = doNothing
 
-runExpr :: Expr -> Runtime Value
-runExpr expr = snd `liftM` evalExpr expr
-
-testExpr :: Expr -> Runtime Bool
-testExpr expr = fst `liftM` evalExpr expr
-
 doNothing :: Runtime ()
 doNothing = return ()

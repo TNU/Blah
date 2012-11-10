@@ -13,6 +13,8 @@ module Parser (
     Factor(..),
     List(..),
     Neg(..),
+    Obj(..),
+    Elem(..),
     Args(..),
     Call(..),
     Paren(..),
@@ -351,7 +353,3 @@ demote (Dj (Ja arth))  = demote (Da arth)
 demote (Da (At term))  = demote (Dt term)
 demote (Dt (Tf fact))  = demote (Df fact)
 demote x               = x
-{-
--- testing
-parseStr :: String -> Either Failure [Decl]
-parseStr str = extract (fst (tokenize str) >>= parse [])-}

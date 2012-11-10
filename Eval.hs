@@ -1,6 +1,7 @@
 module Eval (
     Expr,
-    evalExpr,
+    runExpr,
+    testExpr,
 ) where
 
 import Control.Monad (liftM, liftM2, join)
@@ -18,16 +19,13 @@ import Parser
 
 type Expr = OrOp
 
-evalExpr :: Expr -> Runtime (Bool, Value)
-evalExpr = evalOrop
-
-{- Orop -}
+{- orop -}
 evalOrop :: OrOp -> Runtime (Bool, Value)
 evalOrop (Oa x)    = evalAndOp x
 evalOrop (Or x y)  = applyBinOp doOr (evalOrop x) (evalAndOp y)
     where doOr a@(t,_) b = if t then return a else return b
 
-{- AndOp -}
+{- andop -}
 evalAndOp :: AndOp -> Runtime (Bool, Value)
 evalAndOp (Ac x)    = evalComp x >>= toAndOp
 evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
@@ -36,7 +34,7 @@ evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
 toAndOp :: (Bool, Value, Value) -> Runtime (Bool, Value)
 toAndOp (_, _, x) = return (toBool x, x)
 
-{- Comp -}
+{- comp -}
 evalComp :: Comp -> Runtime (Bool, Value, Value)
 evalComp (Cj x)     = evalJoin x >>= toComp
 evalComp (Lt x y)   = doComp ltOp (evalComp x) (evalJoin y)
@@ -78,13 +76,13 @@ ltOp x      y       = typeFail2 "comparison" x y
 eqOp :: Value -> Value -> Runtime Bool
 eqOp x y = return (x == y)
 
-{- Join -}
+{- join -}
 evalJoin :: Join -> Runtime Value
 evalJoin (Ja x)       = evalArth x
 evalJoin (Concat x y) = applyBinOp conc (evalJoin x) (evalArth y)
     where conc x y = return . Vs $ ((show x) ++ (show y))
 
-{- Arth -}
+{- arth -}
 evalArth :: Arth -> Runtime Value
 evalArth (At x)     = evalTerm x
 evalArth (Add x y)  = applyBinOp add (evalArth x) (evalTerm y)
@@ -94,7 +92,7 @@ evalArth (Sub x y)  = applyBinOp sub (evalArth x) (evalTerm y)
     where sub (Vi x) (Vi y) = return . Vi $ (x - y)
           sub x      y      = typeFail2 "subtraction" x y
 
-{- Term -}
+{- term -}
 evalTerm :: Term -> Runtime Value
 evalTerm (Tf x) = evalFact x
 evalTerm (Mult x y) = applyBinOp mult (evalTerm x) (evalFact y)
@@ -105,44 +103,55 @@ evalTerm (Div x y) = applyBinOp divide (evalTerm x) (evalFact y)
           divide (Vi x) (Vi y) = return . Vi $ (x `div` y)
           divide x      y      = typeFail2 "division" x y
 
-{- Fact -}
+{- fact -}
 evalFact :: Factor -> Runtime Value
 evalFact (Fnothing) = return Vnothing
 evalFact (Fb x)     = return . Vb $ x
 evalFact (Fs x)     = return . Vs $ x
 evalFact (Fl x)     = evalList x
 evalFact (Fp x)     = evalNeg x
-evalFact (Fn x)     = (evalNeg x) >>= negateVal
+evalFact (Fn x)     = evalNeg x >>= negateVal
     where negateVal (Vi x) = return . Vi . negate $ x
           negateVal x      = typeFail1 "negation" x
 
 evalList :: List -> Runtime Value
 evalList Lempty         = return . Vl $ Seq.empty
-evalList (Lone x)       = (Vl . Seq.singleton . snd) `liftM` evalExpr x
-evalList (Lcons list x) = liftM2 append (evalExpr x) (evalList list)
-    where append (b, val) (Vl list) = Vl $ (list Seq.|> val)
+evalList (Lone x)       = (Vl . Seq.singleton) `liftM` runExpr x
+evalList (Lcons list x) = liftM2 append (runExpr x) (evalList list)
+    where append val (Vl list) = Vl $ (list Seq.|> val)
 
-{- Neg -}
+{- neg -}
 evalNeg :: Neg -> Runtime Value
 evalNeg (Ni x) = return . Vi $ x
 evalNeg (Nd x) = getVar x
 evalNeg (Nc x) = evalCall x
+evalNeg (No x) = evalObj x
 evalNeg (Np x) = evalParen x
 
+{- call -}
 evalCall :: Call -> Runtime Value
 evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
     where callFunc (Vf name) vals = getSysFunc name >>= runFunc vals
           callFunc x         _    = typeFail1 "function call" x
           runFunc vals func = runSystemFunc func vals
 
-{- Args -}
+{- args -}
 evalArgs :: Args -> Runtime [Value]
 evalArgs Rempty = return []
-evalArgs (Rcons args expr) = liftM2 (:) (snd `liftM` evalExpr expr) (evalArgs args)
+evalArgs (Rcons args expr) = liftM2 (:) (runExpr expr) (evalArgs args)
 
-{- Paren -}
+{- object -}
+evalObj :: Obj -> Runtime Value
+evalObj (PropS string prop) = return . Vs $ "not implemented"
+evalObj (PropD name   prop) = return . Vs $ "not implemented"
+evalObj (PropP paren  prop) = return . Vs $ "not implemented"
+evalObj (PropO obj    prop) = return . Vs $ "not implemented"
+evalObj (PropE elem   prop) = return . Vs $ "not implemented"
+evalObj (PropL list   prop) = return . Vs $ "not implemented"
+
+{- paren -}
 evalParen :: Paren -> Runtime Value
-evalParen (Pe x) = snd `liftM` evalExpr x
+evalParen (Pe x) = runExpr x
 
 {- Utility Functions -}
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
@@ -156,3 +165,9 @@ typeFail2 :: String -> Value -> Value -> Runtime a
 typeFail2 opName x y = evalFail $ opName ++ " of \""
                               ++ (show x) ++ "\" and \"" ++ (show y) ++ "\" "
                               ++ "is not supported"
+
+runExpr :: Expr -> Runtime Value
+runExpr expr = snd `liftM` evalOrop expr
+
+testExpr :: Expr -> Runtime Bool
+testExpr expr = fst `liftM` evalOrop expr

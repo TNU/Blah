@@ -1,7 +1,6 @@
 module State (
-    Runtime(..),
-    Scope(..),
-    SystemFuncMap(..),
+    Runtime,
+    Scope,
     getVar,
     setVar,
     getSysFunc,
@@ -21,34 +20,49 @@ import Control.Monad.Trans.Error
 
 import qualified System.IO as IO
 import qualified Data.Map as Map
+import qualified Data.Sequence as Seq
 
 import Failure
 import Value
 import Func
+import Heap
 
 type Scope          = Map.Map String Value
-type StateData      = (Scope, SystemFuncMap)
+type StateData      = (Scope, SystemFuncMap, Heap)
 type RuntimeState   = StateT StateData IO
 type Runtime        = Failable RuntimeState
 
 {- State Modifiers -}
 getVar ::  String -> Runtime Value
 getVar name = usingState get >>= find
-   where find (scope, _)  = toVal (Map.lookup name scope)
-         toVal (Just val) = return val
-         toVal Nothing    = evalFail  $ "variable " ++ (show name)
-                                     ++ " does not exist"
+   where find (scope, _, _) = toVal (Map.lookup name scope)
+         toVal (Just val)   = return val
+         toVal Nothing      = evalFail  $ "variable " ++ (show name)
+                                       ++ " does not exist"
 
 setVar :: String -> Value -> Runtime ()
 setVar name val = usingState . modify $ set
-    where set (scope, sysFuncs) = (Map.insert name val scope, sysFuncs)
+    where set (scope, funcs, heap) = (Map.insert name val scope, funcs, heap)
 
 getSysFunc :: String -> Runtime SystemFunc
 getSysFunc name = usingState get >>= find
-    where find (_, sysFuncs) = toVal (Map.lookup name sysFuncs)
+    where find (_, funcs, _) = toVal (Map.lookup name funcs)
           toVal (Just func)  = return func
           toVal Nothing      = evalFail $ "system function " ++ (show name)
                                        ++ " does not exist"
+
+getFromHeap :: Int -> Runtime Value
+getFromHeap index = do (_, _, heap) <- usingState get
+                       if hasIndex heap index
+                       then return (extract heap index)
+                       else evalFail $ "heap index out of bounds at "
+                                    ++ (show index)
+
+addToHeap :: Value -> Runtime Int
+addToHeap val = do (scope, funcs, heap) <- usingState get
+                   let (newHeap, index) = insert heap val
+                   usingState (put (scope, funcs, newHeap))
+                   return index
 
 {- IO Operations -}
 readLine :: Runtime String
@@ -73,4 +87,4 @@ run :: Runtime a -> StateData -> IO (Either Failure a)
 run = evalStateT . runErrorT
 
 newRuntime :: Scope -> SystemFuncMap -> StateData
-newRuntime scope sysFuncs = (scope, sysFuncs)
+newRuntime scope funcs = (scope, funcs, newHeap)

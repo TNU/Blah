@@ -34,6 +34,7 @@ basicFuncs = Map.fromList [
         ("readln", readln)
     ]
 
+{- io functions -}
 write :: Func
 write values = lift printValues >> discard
     where printValues = mapM_ (putStr . toStr) values
@@ -49,7 +50,8 @@ readchr _ = toStrVal `liftM` lift getChar
 readln :: Func
 readln _ = toStrVal `liftM` lift getLine
     where toStrVal = Vs
-
+    
+    
 funcFail :: String -> FailableIO Value
 funcFail = throwError . strMsg
 

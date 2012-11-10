@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
 import Value (Value(..), toStr)
-import Func (basicFuncs, basicFuncVars)
+import Func (SystemFuncMap, basicFuncs, basicFuncVars)
 import State
 import Runner (runLine)
 

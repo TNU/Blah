@@ -13,6 +13,7 @@ data Value = Vi Integer
            | Vs String
            | Vl (Seq.Seq Value)
            | Vf String
+           | Vr Int
            | Vnothing
            deriving (Ord, Eq)
 
