@@ -16,6 +16,7 @@ import Func
 import Failure
 import State
 import Parser
+import Converters
 
 type Expr = OrOp
 
@@ -32,7 +33,7 @@ evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
     where doAnd a@(t,_) b = if t then toAndOp b else return a
 
 toAndOp :: (Bool, Value, Value) -> Runtime (Bool, Value)
-toAndOp (_, _, x) = return (toBool x, x)
+toAndOp (_, _, x) = toBool x >>= \bool -> return (bool, x)
 
 {- comp -}
 evalComp :: Comp -> Runtime (Bool, Value, Value)
@@ -45,60 +46,66 @@ evalComp (Lte x y)  = doComp lteOp(evalComp x) (evalJoin y)
     where lteOp x y = not `liftM` ltOp y x
 evalComp (Gte x y)  = doComp gteOp (evalComp x) (evalJoin y)
     where gteOp x y = not `liftM` ltOp x y
-evalComp (Neq x y)   = doComp neOp (evalComp x) (evalJoin y)
+evalComp (Neq x y)  = doComp neOp (evalComp x) (evalJoin y)
     where neOp x y  = not `liftM` eqOp x y
 
 toComp :: Value -> Runtime (Bool, Value, Value)
-toComp x = return (True, x, x)
+toComp x = deref x >>= \y -> return (True, y, x)
 
 doComp :: (Value -> Value -> Runtime Bool) -> Runtime (Bool, Value, Value)
                                            -> Runtime Value
                                            -> Runtime (Bool, Value, Value)
-doComp op a b = do (old, x, _)  <- a
-                   y            <- b
-                   result       <- x `op` y
+doComp op a b = do (old, x, _) <- a
+                   y           <- b >>= deref
+                   result      <- x `op` y
                    let new = result && old
                    return (new, y, Vb new)
 
 ltOp :: Value -> Value -> Runtime Bool
-ltOp (Vi x) (Vi y)     = return (x < y)
-ltOp (Vs x) (Vs y)     = return (x < y)
+ltOp (Vi x)   (Vi y)   = return (x < y)
+ltOp (Vs x)   (Vs y)   = return (x < y)
 ltOp a@(Vl x) b@(Vl y) = allTrue [allLte, notLonger, notEqual]
-    where false     = return False
-          true      = return True
-          eachGt    = Seq.zipWith ltOp y x
-          allLte    = not `liftM` (Fold.foldr (liftM2 (||)) false eachGt)
+    where mFalse    = return False
+          mTrue     = return True
+          eachGt    = Seq.zipWith ltOnVals y x
+          ltOnVals c d = applyBinOp ltOp (deref c) (deref d)
+          allLte    = not `liftM` (Fold.foldr (liftM2 (||)) mFalse eachGt)
           notLonger = return (Seq.length x <= Seq.length y)
           notEqual  = not `liftM` eqOp a b
-          allTrue   = foldr (liftM2 (&&)) true
+          allTrue   = foldr (liftM2 (&&)) mTrue
 ltOp x      y       = typeFail2 "comparison" x y
 
 eqOp :: Value -> Value -> Runtime Bool
-eqOp x y = return (x == y)
+eqOp (Vl x) (Vl y) = (lengthEq &&) `liftM` allEq
+    where lengthEq = Seq.length x == Seq.length y
+          allEq    = Fold.foldr (liftM2 (&&)) (return True) eachEq
+          eachEq   = Seq.zipWith eqOnVals x y
+          eqOnVals a b = applyBinOp eqOp (deref a) (deref b)
+eqOp x      y      = return (x == y)
 
 {- join -}
 evalJoin :: Join -> Runtime Value
 evalJoin (Ja x)       = evalArth x
-evalJoin (Concat x y) = applyBinOp conc (evalJoin x) (evalArth y)
-    where conc x y = return . Vs $ ((show x) ++ (show y))
+evalJoin (Concat x y) = applyBinOpOnVal conc (evalJoin x) (evalArth y)
+    where conc x y = Vs `liftM` liftM2 (++) (toStr x) (toStr y)
 
 {- arth -}
 evalArth :: Arth -> Runtime Value
 evalArth (At x)     = evalTerm x
-evalArth (Add x y)  = applyBinOp add (evalArth x) (evalTerm y)
+evalArth (Add x y)  = applyBinOpOnVal add (evalArth x) (evalTerm y)
     where add (Vi x) (Vi y) = return . Vi $ (x + y)
           add x      y      = typeFail2 "addition" x y
-evalArth (Sub x y)  = applyBinOp sub (evalArth x) (evalTerm y)
+evalArth (Sub x y)  = applyBinOpOnVal sub (evalArth x) (evalTerm y)
     where sub (Vi x) (Vi y) = return . Vi $ (x - y)
           sub x      y      = typeFail2 "subtraction" x y
 
 {- term -}
 evalTerm :: Term -> Runtime Value
 evalTerm (Tf x) = evalFact x
-evalTerm (Mult x y) = applyBinOp mult (evalTerm x) (evalFact y)
+evalTerm (Mult x y) = applyBinOpOnVal mult (evalTerm x) (evalFact y)
     where mult (Vi x) (Vi y) = return . Vi $ (x * y)
           mult x      y      = typeFail2 "multiplication" x y
-evalTerm (Div x y) = applyBinOp divide (evalTerm x) (evalFact y)
+evalTerm (Div x y) = applyBinOpOnVal divide (evalTerm x) (evalFact y)
     where divide (Vi x) (Vi 0) = evalFail "divide by zero"
           divide (Vi x) (Vi y) = return . Vi $ (x `div` y)
           divide x      y      = typeFail2 "division" x y
@@ -108,14 +115,14 @@ evalFact :: Factor -> Runtime Value
 evalFact (Fnothing) = return Vnothing
 evalFact (Fb x)     = return . Vb $ x
 evalFact (Fs x)     = return . Vs $ x
-evalFact (Fl x)     = evalList x
+evalFact (Fl x)     = Vrl `liftM` (evalList x >>= addToHeap)
 evalFact (Fp x)     = evalNeg x
 evalFact (Fn x)     = evalNeg x >>= negateVal
-    where negateVal (Vi x) = return . Vi . negate $ x
-          negateVal x      = typeFail1 "negation" x
+    where negateVal (Vi x)   = return . Vi . negate $ x
+          negateVal x        = typeFail1 "negation" x
 
 evalList :: List -> Runtime Value
-evalList Lempty         = return . Vl $ Seq.empty
+evalList Lempty         = return (Vl Seq.empty)
 evalList (Lone x)       = (Vl . Seq.singleton) `liftM` runExpr x
 evalList (Lcons list x) = liftM2 append (runExpr x) (evalList list)
     where append val (Vl list) = Vl $ (list Seq.|> val)
@@ -133,7 +140,12 @@ evalCall :: Call -> Runtime Value
 evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
     where callFunc (Vf name) vals = getSysFunc name >>= runFunc vals
           callFunc x         _    = typeFail1 "function call" x
-          runFunc vals func = runSystemFunc func vals
+
+runFunc :: [Value] -> SystemFunc -> Runtime Value
+runFunc args func = do heap <- getHeap
+                       (value, newHeap) <- runSystemFunc func heap args
+                       setHeap newHeap
+                       return value
 
 {- args -}
 evalArgs :: Args -> Runtime [Value]
@@ -142,18 +154,40 @@ evalArgs (Rcons args expr) = liftM2 (:) (runExpr expr) (evalArgs args)
 
 {- object -}
 evalObj :: Obj -> Runtime Value
-evalObj (PropS string prop) = return . Vs $ "not implemented"
-evalObj (PropD name   prop) = return . Vs $ "not implemented"
-evalObj (PropP paren  prop) = return . Vs $ "not implemented"
-evalObj (PropO obj    prop) = return . Vs $ "not implemented"
+evalObj (PropS string prop) = strProp prop string
+evalObj (PropD name   prop) = getVar name >>= valProp prop
+evalObj (PropL list   prop) = evalList list >>= valProp prop
+evalObj (PropP paren  prop) = evalParen paren >>= valProp prop
+evalObj (PropO obj    prop) = evalObj obj >>= valProp prop
 evalObj (PropE elem   prop) = return . Vs $ "not implemented"
-evalObj (PropL list   prop) = return . Vs $ "not implemented"
+
+valProp :: String -> Value -> Runtime Value
+valProp prop (Vs str)   = strProp prop str
+valProp prop (Vl list)  = listProp prop list
+valProp prop (Vrl ref)  = listRefProp prop ref
+valProp prop x          = typeFail1 "property lookup" x
+
+strProp :: String -> String -> Runtime Value
+strProp "length" = return . Vi . fromIntegral . length
+
+listProp :: String -> Seq.Seq Value -> Runtime Value
+listProp "length" = return . Vi . fromIntegral . Seq.length
+
+listRefProp :: String -> Int -> Runtime Value
+listRefProp prop ref = getFromHeap ref >>= doAccessors
+    where doAccessors (Vl seq) = listProp prop seq
 
 {- paren -}
 evalParen :: Paren -> Runtime Value
 evalParen (Pe x) = runExpr x
 
 {- Utility Functions -}
+applyBinOpOnVal :: (Value -> Value -> Runtime a) ->
+                  Runtime Value -> Runtime Value -> Runtime a
+applyBinOpOnVal binOp a b = do da <- a >>= deref
+                               db <- b >>= deref
+                               binOp da db
+
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
 applyBinOp binOp a b = join (liftM2 binOp a b)
 

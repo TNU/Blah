@@ -158,16 +158,19 @@ reduce :: [Decl] -> [Token] -> Runtime [Decl]
 {- object -}
 reduce decls@((Dk (STR s)):rest)                 tokens@(DOT:_) = shift decls tokens
 reduce decls@((Dk (ID d)):rest)                  tokens@(DOT:_) = shift decls tokens
+reduce decls@((Df (Fl l)):rest)                  tokens@(DOT:_) = shift decls tokens
 reduce decls@((Dp paren):rest)                   tokens@(DOT:_) = shift decls tokens
 reduce decls@((Do obj):rest)                     tokens@(DOT:_) = shift decls tokens
 reduce decls@((De elem):rest)                    tokens@(DOT:_) = shift decls tokens
 reduce decls@((Dk DOT):(Dk (STR x)):rest)                tokens = shift decls tokens
 reduce decls@((Dk DOT):(Dk (ID x)):rest)                 tokens = shift decls tokens
+reduce decls@((Dk DOT):(Df (Fl x)):rest)                      tokens = shift decls tokens
 reduce decls@((Dk DOT):(Dp x):rest)                      tokens = shift decls tokens
 reduce decls@((Dk DOT):(Do x):rest)                      tokens = shift decls tokens
 reduce decls@((Dk DOT):(De x):rest)                      tokens = shift decls tokens
 reduce decls@((Dk (ID prop)):(Dk DOT):(Dk (STR x)):rest) tokens = reduce ((Do (PropS x prop)):rest) tokens
 reduce decls@((Dk (ID prop)):(Dk DOT):(Dk (ID x)):rest)  tokens = reduce ((Do (PropD x prop)):rest) tokens
+reduce decls@((Dk (ID prop)):(Dk DOT):(Df (Fl x)):rest)  tokens = reduce ((Do (PropL x prop)):rest) tokens
 reduce decls@((Dk (ID prop)):(Dk DOT):(Dp x):rest)       tokens = reduce ((Do (PropP x prop)):rest) tokens
 reduce decls@((Dk (ID prop)):(Dk DOT):(Do x):rest)       tokens = reduce ((Do (PropO x prop)):rest) tokens
 reduce decls@((Dk (ID prop)):(Dk DOT):(De x):rest)       tokens = reduce ((Do (PropE x prop)):rest) tokens

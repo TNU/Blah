@@ -25,5 +25,3 @@ hasIndex (Heap items uses) index = index < Seq.length items
 
 extract :: Heap -> Int -> Value
 extract (Heap items uses) index = Seq.index items index
-
-

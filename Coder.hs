@@ -9,8 +9,9 @@ import qualified Data.Map as Map
 
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
-import Value (Value(..), toStr)
+import Value (Value)
 import Func (SystemFuncMap, basicFuncs, basicFuncVars)
+import Converters (toStr)
 import State
 import Runner (runLine)
 
@@ -28,7 +29,7 @@ replLine :: [Decl] -> Runtime ()
 
 replLine [(Dl line)]  = replError (runLine line replShowLine) >> replRest
     where replError state = state `catchError` showLine
-          replShowLine = showLine . toStr
+          replShowLine val = toStr val >>= showLine
 
 replLine (line@((Dl _):_)) = replLine (Dnewline:line)
 

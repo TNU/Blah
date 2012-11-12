@@ -3,7 +3,12 @@ module State (
     Scope,
     getVar,
     setVar,
+    addToHeap,
+    getFromHeap,
+    setHeap,
+    getHeap,
     getSysFunc,
+
     isEOF,
     readLine,
     showStr,
@@ -52,17 +57,26 @@ getSysFunc name = usingState get >>= find
                                        ++ " does not exist"
 
 getFromHeap :: Int -> Runtime Value
-getFromHeap index = do (_, _, heap) <- usingState get
+getFromHeap index = do heap <- getHeap
                        if hasIndex heap index
                        then return (extract heap index)
                        else evalFail $ "heap index out of bounds at "
                                     ++ (show index)
 
 addToHeap :: Value -> Runtime Int
-addToHeap val = do (scope, funcs, heap) <- usingState get
+addToHeap val = do heap <- getHeap
                    let (newHeap, index) = insert heap val
-                   usingState (put (scope, funcs, newHeap))
+                   setHeap newHeap
                    return index
+
+getHeap :: Runtime Heap
+getHeap = usingState get >>= onlyHeap
+    where onlyHeap (_, _, heap) = return heap
+
+setHeap :: Heap -> Runtime ()
+setHeap = usingState . modify . set
+    where set heap (scope, funcs, _) = (scope, funcs, heap)
+
 
 {- IO Operations -}
 readLine :: Runtime String
