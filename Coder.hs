@@ -7,17 +7,15 @@ import Control.Monad.Trans.Error (catchError)
 
 import qualified Data.Map as Map
 
+import State
 import Tokenizer (tokenize)
 import Parser (parse, Decl(..))
-import Value (Value)
-import Func (SystemFuncMap, basicFuncs, basicFuncVars)
 import Converters (toStr)
-import State
 import Runner (runLine)
 
 runRepl :: IO ()
 runRepl = run repl replRuntime >> return ()
-    where replRuntime = newRuntime defaultVars systemFuncMap
+    where replRuntime = newRuntime Map.empty
 
 repl :: Runtime ()
 repl = replRest
@@ -43,12 +41,6 @@ replLine unmatched = do
     where parseRestLine = tokenize >>= parse unmatched
           parseError state = state `catchError` handleError
           handleError error = showLine error >> return []
-
-defaultVars :: Scope
-defaultVars = basicFuncVars
-
-systemFuncMap :: SystemFuncMap
-systemFuncMap = basicFuncs
 
 replFail :: String -> Runtime ()
 replFail = showLine . ("<repl> " ++)

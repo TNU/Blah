@@ -1,13 +1,14 @@
 module State (
+    Value(..),
     Runtime,
-    Scope,
+
     getVar,
     setVar,
     addToHeap,
+    setAtHeap,
     getFromHeap,
     setHeap,
     getHeap,
-    getSysFunc,
 
     isEOF,
     readLine,
@@ -19,6 +20,7 @@ module State (
     newRuntime,
 ) where
 
+import Control.Monad (liftM)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
@@ -26,35 +28,54 @@ import Control.Monad.Trans.Error
 import qualified System.IO as IO
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
+import qualified Data.Foldable as Fold
 
 import Failure
-import Value
-import Func
-import Heap
+import Memory
 
 type Scope          = Map.Map String Value
-type StateData      = (Scope, SystemFuncMap, Heap)
+type Heap           = Memory Value
+type StateData      = (Scope, Heap)
 type RuntimeState   = StateT StateData IO
 type Runtime        = Failable RuntimeState
 
-{- State Modifiers -}
-getVar ::  String -> Runtime Value
-getVar name = usingState get >>= find
-   where find (scope, _, _) = toVal (Map.lookup name scope)
-         toVal (Just val)   = return val
-         toVal Nothing      = evalFail  $ "variable " ++ (show name)
-                                       ++ " does not exist"
+type SysFunc        = [Value] -> Runtime Value
+type BoundSysFunc   = Int -> [Value] -> Runtime Value
 
+{- Value -}
+data Value = Vnothing
+           | Vi Int
+           | Vb Bool
+           | Vs String
+           | Vl (Seq.Seq Value)
+           | Vrl Int
+           | Vsf SysFunc String
+           | Vbsf BoundSysFunc Int String
+
+{- State Modifiers -}
 setVar :: String -> Value -> Runtime ()
 setVar name val = usingState . modify $ set
-    where set (scope, funcs, heap) = (Map.insert name val scope, funcs, heap)
+    where set (scope, heap) = (Map.insert name val scope, heap)
 
-getSysFunc :: String -> Runtime SystemFunc
-getSysFunc name = usingState get >>= find
-    where find (_, funcs, _) = toVal (Map.lookup name funcs)
-          toVal (Just func)  = return func
-          toVal Nothing      = evalFail $ "system function " ++ (show name)
-                                       ++ " does not exist"
+getVar ::  String -> Runtime Value
+getVar name = usingState get >>= find
+    where find (scope, _) = toVal (Map.lookup name scope)
+          toVal (Just val)   = return val
+          toVal Nothing      = evalFail  $ "variable " ++ (show name)
+                                        ++ " does not exist"
+
+addToHeap :: Value -> Runtime Int
+addToHeap val = do heap <- getHeap
+                   let (newHeap, index) = insert heap val
+                   setHeap newHeap
+                   return index
+
+setAtHeap :: Int -> Value -> Runtime ()
+setAtHeap index val = do heap <- getHeap
+                         if hasIndex heap index
+                         then setHeap (update heap index val)
+                         else evalFail $ "heap index out of bounds at "
+                                      ++ (show index)
 
 getFromHeap :: Int -> Runtime Value
 getFromHeap index = do heap <- getHeap
@@ -63,20 +84,24 @@ getFromHeap index = do heap <- getHeap
                        else evalFail $ "heap index out of bounds at "
                                     ++ (show index)
 
-addToHeap :: Value -> Runtime Int
-addToHeap val = do heap <- getHeap
-                   let (newHeap, index) = insert heap val
-                   setHeap newHeap
-                   return index
-
 getHeap :: Runtime Heap
 getHeap = usingState get >>= onlyHeap
-    where onlyHeap (_, _, heap) = return heap
+    where onlyHeap (_, heap) = return heap
 
 setHeap :: Heap -> Runtime ()
 setHeap = usingState . modify . set
-    where set heap (scope, funcs, _) = (scope, funcs, heap)
+    where set heap (scope, _) = (scope, heap)
 
+{- Value -}
+instance Show Value where
+    show Vnothing       = "Nothing"
+    show (Vi int)       = show int
+    show (Vb bool)      = show bool
+    show (Vs string)    = string
+    show (Vrl index)    = "LIST REF: " ++ (show index) ++ ""
+    show (Vl list)      = show (Fold.toList list)
+    show (Vsf _ name)   = name ++ "(..)"
+    show (Vbsf _ i name) = (show i) ++ ":" ++ name ++ "(..)"
 
 {- IO Operations -}
 readLine :: Runtime String
@@ -100,5 +125,5 @@ usingIO = lift . lift
 run :: Runtime a -> StateData -> IO (Either Failure a)
 run = evalStateT . runErrorT
 
-newRuntime :: Scope -> SystemFuncMap -> StateData
-newRuntime scope funcs = (scope, funcs, newHeap)
+newRuntime :: Scope -> StateData
+newRuntime scope = (scope, newMemory)

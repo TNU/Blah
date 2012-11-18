@@ -3,6 +3,7 @@ module Parser (
     Stmt(..),
     IfStmt(..),
     WhileStmt(..),
+    AssnStmt(..),
     Decl(..),
     OrOp(..),
     AndOp(..),
@@ -24,9 +25,9 @@ module Parser (
 import Data.Functor.Identity
 import Control.Monad.Trans.Error
 
-import Failure
-import State
-import Tokenizer
+import Failure (parseFail)
+import Tokenizer (Token(..))
+import State (Runtime)
 
 -- decls are showable and equable for testing
 data Decl = Dl Line
@@ -56,7 +57,7 @@ data Line = Ls Stmt
 data Stmt = Se OrOp
           | Si IfStmt
           | Sw WhileStmt
-          | Assn String OrOp
+          | Sa AssnStmt
           deriving (Show, Eq)
 
 data IfStmt = If OrOp Line
@@ -66,6 +67,10 @@ data IfStmt = If OrOp Line
 
 data WhileStmt = While OrOp Line
                deriving (Show, Eq)
+
+data AssnStmt = AssnId String OrOp
+              | AssnElem Elem OrOp
+              deriving (Show, Eq)
 
 data OrOp = Oa AndOp
           | Or OrOp AndOp
@@ -111,7 +116,7 @@ data List = Lempty
           | Lcons List OrOp
           deriving (Show, Eq)
 
-data Neg  = Ni Integer
+data Neg  = Ni Int
           | Nd String
           | Np Paren
           | No Obj
@@ -121,18 +126,18 @@ data Neg  = Ni Integer
 
 data Obj = PropS String String
          | PropD String String
+         | PropL List   String
          | PropP Paren  String
          | PropO Obj    String
          | PropE Elem   String
-         | PropL List   String
          deriving (Show, Eq)
 
-data Elem = ElemS String OrOp
-          | ElemD String OrOp
+data Elem = ElemD String OrOp
+          | ElemL List   OrOp
           | ElemP Paren  OrOp
           | ElemO Obj    OrOp
           | ElemE Elem   OrOp
-          | ElemL List   OrOp
+          | ElemC Call   OrOp
           deriving (Show, Eq)
 
 data Args = Rempty
@@ -176,26 +181,26 @@ reduce decls@((Dk (ID prop)):(Dk DOT):(Do x):rest)       tokens = reduce ((Do (P
 reduce decls@((Dk (ID prop)):(Dk DOT):(De x):rest)       tokens = reduce ((Do (PropE x prop)):rest) tokens
 
 {- elem -}
-reduce decls@((Dk (STR s)):rest)             tokens@(LBRA:_) = shift decls tokens
 reduce decls@((Dk (ID d)):rest)              tokens@(LBRA:_) = shift decls tokens
 reduce decls@((Dp paren):rest)               tokens@(LBRA:_) = shift decls tokens
 reduce decls@((Do obj):rest)                 tokens@(LBRA:_) = shift decls tokens
 reduce decls@((De elem):rest)                tokens@(LBRA:_) = shift decls tokens
-reduce decls@((Dk LBRA):(Dk (STR s)):rest)            tokens = shift decls tokens
+reduce decls@((Dc call):rest)                tokens@(LBRA:_) = shift decls tokens
 reduce decls@((Dk LBRA):(Dk (ID d)):rest)             tokens = shift decls tokens
 reduce decls@((Dk LBRA):(Dp paren):rest)              tokens = shift decls tokens
 reduce decls@((Dk LBRA):(Do obj):rest)                tokens = shift decls tokens
 reduce decls@((Dk LBRA):(De elem):rest)               tokens = shift decls tokens
-reduce decls@((Db i):(Dk LBRA):(Dk (STR x)):rest)     tokens = shift decls tokens
+reduce decls@((Dk LBRA):(Dh call):rest)               tokens = shift decls tokens
 reduce decls@((Db i):(Dk LBRA):(Dk (ID x)):rest)      tokens = shift decls tokens
 reduce decls@((Db i):(Dk LBRA):(Dp x):rest)           tokens = shift decls tokens
 reduce decls@((Db i):(Dk LBRA):(Do x):rest)           tokens = shift decls tokens
 reduce decls@((Db i):(Dk LBRA):(De x):rest)           tokens = shift decls tokens
-reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dk (STR x)):rest) tokens = reduce ((De (ElemS x i)):rest) tokens
+reduce decls@((Db i):(Dk LBRA):(Dh x):rest)           tokens = shift decls tokens
 reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dk (ID x)):rest)  tokens = reduce ((De (ElemD x i)):rest) tokens
 reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dp x):rest)       tokens = reduce ((De (ElemP x i)):rest) tokens
 reduce ((Dk RBRA):(Db i):(Dk LBRA):(Do x):rest)       tokens = reduce ((De (ElemO x i)):rest) tokens
 reduce ((Dk RBRA):(Db i):(Dk LBRA):(De x):rest)       tokens = reduce ((De (ElemE x i)):rest) tokens
+reduce ((Dk RBRA):(Db i):(Dk LBRA):(Dh x):rest)       tokens = reduce ((De (ElemC x i)):rest) tokens
 
 {- list -}
 reduce decls@((Dk LBRA):rest)                         tokens = shift decls tokens
@@ -269,8 +274,11 @@ reduce ((Dk RPAREN):(Db orop):(Dk LPAREN):rest) tokens = reduce ((Dp (Pe orop)):
 
 {- assign -}  -- assignments not allowed across lines
 reduce decls@((Dn (Nd id)):rest)      tokens@(COLON:_) = shift decls tokens
+reduce decls@((De elem):rest)         tokens@(COLON:_) = shift decls tokens
 reduce decls@((Dk COLON):(Dn (Nd id)):rs) tokens@(_:_) = shift decls tokens
-reduce ((Db orop):(Dk COLON):(Dn (Nd name)):rs) tokens = reduce ((Ds (Assn name orop)):rs) tokens
+reduce decls@((Dk COLON):(De elem):rs)    tokens@(_:_) = shift decls tokens
+reduce ((Db orop):(Dk COLON):(Dn (Nd name)):rs) tokens = reduce ((Ds (Sa (AssnId name orop))):rs) tokens
+reduce ((Db orop):(Dk COLON):(De elem):rs)      tokens = reduce ((Ds (Sa (AssnElem elem orop))):rs) tokens
 
 {- join -}
 reduce decls@((Dj join):rest)          tokens@(CONCAT:_) = shift decls tokens

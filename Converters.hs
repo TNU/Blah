@@ -9,37 +9,39 @@ import Control.Monad (liftM, liftM2)
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as Fold
 
-import Value
 import State
 
 toBool :: Value -> Runtime Bool
-toBool (Vi 0)   = return False
-toBool (Vi x)   = return True
-toBool (Vb x)   = return x
-toBool (Vs "")  = return False
-toBool (Vs x)   = return True
-toBool (Vl x)   = return . not . Seq.null $ x
-toBool (Vf _)   = return True
-toBool Vnothing = return False
-toBool (Vrl i)  = getFromHeap i >>= toBool
+toBool Vnothing     = return False
+toBool (Vb x)       = return x
+toBool (Vi 0)       = return False
+toBool (Vi x)       = return True
+toBool (Vs "")      = return False
+toBool (Vs x)       = return True
+toBool (Vl x)       = return . not . Seq.null $ x
+toBool (Vrl i)      = getFromHeap i >>= toBool
+toBool (Vsf _ _)    = return True
+toBool (Vbsf _ _ _) = return True
 
 toStr :: Value -> Runtime String
-toStr Vnothing    = return "Nothing"
-toStr (Vi int)    = return . show $ int
-toStr (Vb bool)   = return . show $ bool
-toStr (Vs string) = return string
-toStr (Vl list)   = listToRepr list
-toStr (Vf name)   = return $ name ++ "(..)"
-toStr (Vrl index) = getFromHeap index >>= toStr
+toStr Vnothing          = return "Nothing"
+toStr (Vb bool)         = return . show $ bool
+toStr (Vi int)          = return . show $ int
+toStr (Vs string)       = return string
+toStr (Vl list)         = listToRepr list
+toStr (Vrl index)       = getFromHeap index >>= toStr
+toStr (Vsf _ name)      = return $ name ++ "(..)"
+toStr (Vbsf _ i name)   = return $ (show i) ++ ":" ++ name ++ "(..)"
 
 toRepr :: Value -> Runtime String
-toRepr Vnothing  = return "Nothing"
-toRepr (Vi int)  = return . show $ int
-toRepr (Vb bool) = return . show $ bool
-toRepr (Vl list) = listToRepr list
-toRepr (Vf name) = return $ name ++ "(..)"
-toRepr (Vrl index) = getFromHeap index >>= toRepr
-toRepr (Vs string) = return $ "'" ++ concatMap esc string ++ "'"
+toRepr Vnothing     = return "Nothing"
+toRepr (Vi int)     = return . show $ int
+toRepr (Vb bool)    = return . show $ bool
+toRepr (Vl list)    = listToRepr list
+toRepr (Vrl index)  = getFromHeap index >>= toRepr
+toRepr (Vsf _ name) = return $ name ++ "(..)"
+toRepr (Vbsf _ i name) = return $ (show i) ++ ":" ++ name ++ "(..)"
+toRepr (Vs string)  = return $ "'" ++ concatMap esc string ++ "'"
     where esc '\a' = "\\a"
           esc '\b' = "\\b"
           esc '\f' = "\\f"

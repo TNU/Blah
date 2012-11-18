@@ -2,23 +2,43 @@ module Eval (
     Expr,
     runExpr,
     testExpr,
+    elemAssn,
 ) where
 
-import Control.Monad (liftM, liftM2, join)
+import Control.Monad (liftM, liftM2, liftM3, join)
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
 
 import qualified Data.Foldable as Fold
 import qualified Data.Sequence as Seq
 
-import Value
-import Func
-import Failure
-import State
+import Failure (evalFail, typeFail1, typeFail2)
 import Parser
+import State
 import Converters
+import Properties
 
 type Expr = OrOp
+
+elemAssn :: Elem -> Value -> Runtime ()
+elemAssn (ElemD name i)  v = setElemHelper (getVar name) (runExpr i) v
+elemAssn (ElemL list i)  v = setElemHelper (evalList list) (runExpr i) v
+elemAssn (ElemP paren i) v = setElemHelper (evalParen paren) (runExpr i) v
+elemAssn (ElemC call i)  v = setElemHelper (evalCall call) (runExpr i) v
+elemAssn (ElemO obj i)   v = setElemHelper (evalObj obj) (runExpr i) v
+elemAssn (ElemE elem i)  v = setElemHelper (evalElem elem) (runExpr i) v
+
+setElemHelper :: Runtime Value -> Runtime Value -> Value -> Runtime ()
+setElemHelper a b c = join (liftM3 setElem a b (return c))
+
+setElem :: Value -> Value -> Value -> Runtime ()
+setElem (Vrl r) (Vi i) v = do (Vl list) <- getFromHeap r
+                              if i >= 0 && i < Seq.length list
+                              then setAtHeap r . Vl $ (Seq.update i v list)
+                              else evalFail "index out of bounds"
+
+setElem (Vrl index) _ value = evalFail  "list indexing only supports integers"
+setElem x           _ value = typeFail1 "indexing" x
 
 {- orop -}
 evalOrop :: OrOp -> Runtime (Bool, Value)
@@ -81,7 +101,14 @@ eqOp (Vl x) (Vl y) = (lengthEq &&) `liftM` allEq
           allEq    = Fold.foldr (liftM2 (&&)) (return True) eachEq
           eachEq   = Seq.zipWith eqOnVals x y
           eqOnVals a b = applyBinOp eqOp (deref a) (deref b)
-eqOp x      y      = return (x == y)
+
+eqOp Vnothing Vnothing = return True
+eqOp (Vi x) (Vi y)             = return (x == y)
+eqOp (Vb x) (Vb y)             = return (x == y)
+eqOp (Vs x) (Vs y)             = return (x == y)
+eqOp (Vsf _ x) (Vsf _ y)       = return (x == y)
+eqOp (Vbsf _ i x) (Vbsf _ j y) = return $ (i == j) && (x == y)
+eqOp x      y                  = return False
 
 {- join -}
 evalJoin :: Join -> Runtime Value
@@ -115,17 +142,19 @@ evalFact :: Factor -> Runtime Value
 evalFact (Fnothing) = return Vnothing
 evalFact (Fb x)     = return . Vb $ x
 evalFact (Fs x)     = return . Vs $ x
-evalFact (Fl x)     = Vrl `liftM` (evalList x >>= addToHeap)
+evalFact (Fl x)     = evalList x
 evalFact (Fp x)     = evalNeg x
 evalFact (Fn x)     = evalNeg x >>= negateVal
     where negateVal (Vi x)   = return . Vi . negate $ x
           negateVal x        = typeFail1 "negation" x
 
+{- list -}
 evalList :: List -> Runtime Value
-evalList Lempty         = return (Vl Seq.empty)
-evalList (Lone x)       = (Vl . Seq.singleton) `liftM` runExpr x
-evalList (Lcons list x) = liftM2 append (runExpr x) (evalList list)
-    where append val (Vl list) = Vl $ (list Seq.|> val)
+evalList list = Vrl `liftM` (makeList list >>= addToHeap)
+    where makeList Lempty         = return (Vl Seq.empty)
+          makeList (Lone x)       = (Vl . Seq.singleton) `liftM` runExpr x
+          makeList (Lcons list x) = liftM2 append (runExpr x) (makeList list)
+          append val (Vl list) = Vl $ (list Seq.|> val)
 
 {- neg -}
 evalNeg :: Neg -> Runtime Value
@@ -134,18 +163,14 @@ evalNeg (Nd x) = getVar x
 evalNeg (Nc x) = evalCall x
 evalNeg (No x) = evalObj x
 evalNeg (Np x) = evalParen x
+evalNeg (Ne x) = evalElem x
 
 {- call -}
 evalCall :: Call -> Runtime Value
 evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
-    where callFunc (Vf name) vals = getSysFunc name >>= runFunc vals
-          callFunc x         _    = typeFail1 "function call" x
-
-runFunc :: [Value] -> SystemFunc -> Runtime Value
-runFunc args func = do heap <- getHeap
-                       (value, newHeap) <- runSystemFunc func heap args
-                       setHeap newHeap
-                       return value
+    where callFunc (Vsf  func _) vals   = func vals
+          callFunc (Vbsf func i _) vals = func i vals
+          callFunc x         _          = typeFail1 "function call" x
 
 {- args -}
 evalArgs :: Args -> Runtime [Value]
@@ -154,28 +179,34 @@ evalArgs (Rcons args expr) = liftM2 (:) (runExpr expr) (evalArgs args)
 
 {- object -}
 evalObj :: Obj -> Runtime Value
-evalObj (PropS string prop) = strProp prop string
-evalObj (PropD name   prop) = getVar name >>= valProp prop
-evalObj (PropL list   prop) = evalList list >>= valProp prop
-evalObj (PropP paren  prop) = evalParen paren >>= valProp prop
-evalObj (PropO obj    prop) = evalObj obj >>= valProp prop
-evalObj (PropE elem   prop) = return . Vs $ "not implemented"
+evalObj (PropS string prop) = return (Vs string) >>= valProp prop
+evalObj (PropD name   prop) = getVar name        >>= valProp prop
+evalObj (PropL list   prop) = evalList list      >>= valProp prop
+evalObj (PropP paren  prop) = evalParen paren    >>= valProp prop
+evalObj (PropO obj    prop) = evalObj obj        >>= valProp prop
+evalObj (PropE elem   prop) = evalElem elem      >>= valProp prop
 
-valProp :: String -> Value -> Runtime Value
-valProp prop (Vs str)   = strProp prop str
-valProp prop (Vl list)  = listProp prop list
-valProp prop (Vrl ref)  = listRefProp prop ref
-valProp prop x          = typeFail1 "property lookup" x
+{- elem -}
+evalElem :: Elem -> Runtime Value
+evalElem (ElemD name expr) = applyBinOp getElem (getVar name) (runExpr expr)
+evalElem (ElemL list expr) = applyBinOp getElem (evalList list) (runExpr expr)
+evalElem (ElemP pare expr) = applyBinOp getElem (evalParen pare) (runExpr expr)
+evalElem (ElemC call expr) = applyBinOp getElem (evalCall call) (runExpr expr)
+evalElem (ElemO obj  expr) = applyBinOp getElem (evalObj obj)   (runExpr expr)
+evalElem (ElemE elem expr) = applyBinOp getElem (evalElem elem) (runExpr expr)
 
-strProp :: String -> String -> Runtime Value
-strProp "length" = return . Vi . fromIntegral . length
+getElem :: Value -> Value -> Runtime Value
+getElem (Vs string) (Vi i) = if i >= 0 && i < length string
+                             then return . Vs $ [string !! i]
+                             else evalFail "index out of bounds"
+getElem (Vs str) _         = evalFail "string indexing only supports integers"
+getElem (Vrl index) (Vi i) = do (Vl list) <- getFromHeap index
+                                if i >= 0 && i < Seq.length list
+                                then return (Seq.index list i)
+                                else evalFail "index out of bounds"
+getElem (Vrl index) _      = evalFail  "list indexing only supports integers"
+getElem x         _        = typeFail1 "indexing" x
 
-listProp :: String -> Seq.Seq Value -> Runtime Value
-listProp "length" = return . Vi . fromIntegral . Seq.length
-
-listRefProp :: String -> Int -> Runtime Value
-listRefProp prop ref = getFromHeap ref >>= doAccessors
-    where doAccessors (Vl seq) = listProp prop seq
 
 {- paren -}
 evalParen :: Paren -> Runtime Value
@@ -190,15 +221,6 @@ applyBinOpOnVal binOp a b = do da <- a >>= deref
 
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
 applyBinOp binOp a b = join (liftM2 binOp a b)
-
-typeFail1 :: String -> Value -> Runtime a
-typeFail1 opName x   = evalFail $ opName ++ " of \"" ++ (show x) ++ "\" "
-                                ++ "is not supported"
-
-typeFail2 :: String -> Value -> Value -> Runtime a
-typeFail2 opName x y = evalFail $ opName ++ " of \""
-                              ++ (show x) ++ "\" and \"" ++ (show y) ++ "\" "
-                              ++ "is not supported"
 
 runExpr :: Expr -> Runtime Value
 runExpr expr = snd `liftM` evalOrop expr

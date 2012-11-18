@@ -8,7 +8,6 @@ import Control.Monad.Trans.Error (runErrorT)
 import qualified Data.Map as Map
 
 import Parser
-import Value
 import State
 import Eval
 
@@ -19,12 +18,13 @@ runLine (Lm line stmt)   sep = runLine line sep >> runStmt stmt sep
 
 runStmt :: Stmt -> (Value -> Runtime ()) -> Runtime ()
 runStmt (Se expr)        sep = runExpr expr >>= sep
-runStmt (Assn name expr) sep = runExpr expr >>= runAssign name sep
+runStmt (Sa assnStmt)    sep = runAssign assnStmt sep
 runStmt (Si ifStmt)      sep = runIfStmt ifStmt sep
 runStmt (Sw whileStmt)   sep = runWhileStmt whileStmt sep
 
-runAssign :: String -> (Value -> Runtime ()) -> Value -> Runtime ()
-runAssign name sep value = setVar name value >> doNothing
+runAssign :: AssnStmt -> (Value -> Runtime ()) -> Runtime ()
+runAssign (AssnId name expr) sep = runExpr expr >>= setVar name >> doNothing
+runAssign (AssnElem elem expr) sep = runExpr expr >>=elemAssn elem >> doNothing
 
 runIfStmt :: IfStmt -> (Value -> Runtime ()) -> Runtime ()
 runIfStmt (If test line) sep = testExpr test >>= decider

@@ -9,7 +9,7 @@
 <parse> [Dk COMMA,Dk THEN,Db (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 4)))))))),Dk IF] [INT 5]
 <parse> [Dk FI] []
 10
-<parse> [Dl (Ls (Assn "b" (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 6)))))))))),Dk IF] [THEN,INT 13]
+<parse> [Dl (Ls (Sa (AssnId "b" (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 6))))))))))),Dk IF] [THEN,INT 13]
 <parse> [Dk COMMA] [FI]
 <parse> [Dk FI,Dk COMMA,Dl (Lm (Ls (Se (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 54)))))))))) (Se (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 23)))))))))),Dk THEN,Db (Oa (Ac (Cj (Ja (At (Tf (Fb False))))))),Dk IF] []
 <parse> [Dl (Ls (Se (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 2)))))))))),Dl (Ls (Se (Oa (Ac (Cj (Ja (At (Tf (Fp (Nd "othewise")))))))))),Dk THEN,Db (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 0)))))))),Dk IF] [FI]

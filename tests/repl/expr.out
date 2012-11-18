@@ -14,8 +14,8 @@
 <eval> variable "b" does not exist
 <parse> [Dk COLON] [INT 3]
 <eval> variable "ad" does not exist
-<parse> [Dl (Ls (Assn "b" (Oa (Ac (Cj (Ja (At (Tf (Fp (Nd "e")))))))))),Dk COLON,Dn (Nd "a")] []
-<parse> [Dl (Ls (Assn "b" (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 7)))))))))),Dk PLUS,Da (At (Tf (Fp (Nd "a"))))] []
+<parse> [Dl (Ls (Sa (AssnId "b" (Oa (Ac (Cj (Ja (At (Tf (Fp (Nd "e"))))))))))),Dk COLON,Dn (Nd "a")] []
+<parse> [Dl (Ls (Sa (AssnId "b" (Oa (Ac (Cj (Ja (At (Tf (Fp (Ni 7))))))))))),Dk PLUS,Da (At (Tf (Fp (Nd "a"))))] []
 <parse> [Dk AND,Dk CONCAT,Dj (Ja (At (Tf (Fs "stuff"))))] [TRUE]
 <parse> [Dk COMMA,Dk LBRA] [RBRA]
 <parse> [Dk RBRA,Dk COMMA,Di (Lcons (Lcons (Lone (Oa (Ac (Cj (Ja (At (Tf (Fs "hello")))))))) (Oa (Ac (Cj (Ja (At (Tf (Fs "I")))))))) (Oa (Ac (Cj (Ja (At (Tf (Fs "am")))))))),Dk LBRA] []

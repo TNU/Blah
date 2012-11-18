@@ -8,10 +8,10 @@ import qualified Data.Map as Map
 import Control.Monad (liftM, liftM2)
 import Data.Char (isDigit, isAlpha, isOctDigit, isHexDigit, digitToInt, chr)
 
-import Failure
+import Failure (tokenizeFail)
 import State
 
-data Token = INT Integer
+data Token = INT Int
            | ID String
            | STR String
            | TRUE | FALSE
