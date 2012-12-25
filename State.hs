@@ -7,8 +7,6 @@ module State (
     addToHeap,
     setAtHeap,
     getFromHeap,
-    setHeap,
-    getHeap,
 
     isEOF,
     readLine,
@@ -26,6 +24,7 @@ import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
 
 import qualified System.IO as IO
+import qualified Data.Set as Set
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as Fold
@@ -54,8 +53,19 @@ data Value = Vnothing
 
 {- State Modifiers -}
 setVar :: String -> Value -> Runtime ()
-setVar name val = usingState . modify $ set
-    where set (scope, heap) = (Map.insert name val scope, heap)
+setVar name val = do (scope, heap) <- usingState get
+                     let newScope = Map.insert name val scope
+                         newHeap = if numInserts heap > 5
+                                   then gc heap newScope
+                                   else heap
+                     usingState . put $ (newScope, newHeap)
+
+printScope :: Scope -> Runtime ()
+printScope = showStr . show . Map.toList
+
+printHeap :: Heap -> Runtime ()
+printHeap (Memory seq set  _) = showStr (show (Fold.toList seq) ++
+                                         show (Set.toList set))
 
 getVar ::  String -> Runtime Value
 getVar name = usingState get >>= find
@@ -84,6 +94,10 @@ getFromHeap index = do heap <- getHeap
                        else evalFail $ "heap index out of bounds at "
                                     ++ (show index)
 
+getScope :: Runtime Scope
+getScope = usingState get >>= onlyScope
+    where onlyScope (scope, _) = return scope
+
 getHeap :: Runtime Heap
 getHeap = usingState get >>= onlyHeap
     where onlyHeap (_, heap) = return heap
@@ -91,17 +105,6 @@ getHeap = usingState get >>= onlyHeap
 setHeap :: Heap -> Runtime ()
 setHeap = usingState . modify . set
     where set heap (scope, _) = (scope, heap)
-
-{- Value -}
-instance Show Value where
-    show Vnothing       = "Nothing"
-    show (Vi int)       = show int
-    show (Vb bool)      = show bool
-    show (Vs string)    = string
-    show (Vrl index)    = "LIST REF: " ++ (show index) ++ ""
-    show (Vl list)      = show (Fold.toList list)
-    show (Vsf _ name)   = name ++ "(..)"
-    show (Vbsf _ i name) = (show i) ++ ":" ++ name ++ "(..)"
 
 {- IO Operations -}
 readLine :: Runtime String
@@ -127,3 +130,45 @@ run = evalStateT . runErrorT
 
 newRuntime :: Scope -> StateData
 newRuntime scope = (scope, newMemory)
+
+{- Value -}
+instance Show Value where
+    show Vnothing       = "Nothing"
+    show (Vi int)       = show int
+    show (Vb bool)      = show bool
+    show (Vs string)    = string
+    show (Vrl index)    = "LIST REF: " ++ (show index) ++ ""
+    show (Vl list)      = show (Fold.toList list)
+    show (Vsf _ name)   = name ++ "(..)"
+    show (Vbsf _ i name) = (show i) ++ ":" ++ name ++ "(..)"
+
+{- Garbage Collection -}
+gc :: Heap -> Scope -> Heap
+gc (Memory items freeIndices numIns) scope = Memory newItems newFreeIndices 0
+    where refSet = Map.foldr (traceVar items) freeIndices scope
+          nulled = Seq.mapWithIndex (nullify refSet) items
+          trimmed = Seq.foldrWithIndex (trim refSet) (Seq.empty, True) nulled
+          (newItems, _) = trimmed
+          newSize = Seq.length newItems
+          newFreeIndices = Set.fromList (take newSize [0..]) Set.\\ refSet
+
+traceVar :: Seq.Seq Value -> Value -> Set.Set Int -> Set.Set Int
+traceVar seq (Vrl i)      seen = trace seq i seen
+traceVar seq (Vbsf _ i _) seen = trace seq i seen
+traceVar seq (Vl list)    seen = Fold.foldr (traceVar seq) seen list
+traceVar _     _          seen = seen
+
+trace :: Seq.Seq Value -> Int -> Set.Set Int -> Set.Set Int
+trace seq i seen
+    | Set.member i seen = seen
+    | otherwise         = traceVar seq (Seq.index seq i) (Set.insert i seen)
+
+nullify :: Set.Set Int -> Int -> Value -> Value
+nullify refSet index val = if Set.member index refSet then val else Vnothing
+
+trim :: Set.Set Int -> Int -> Value
+                    -> (Seq.Seq Value, Bool) -> (Seq.Seq Value, Bool)
+trim refSet index value (items, True) = if Set.member index refSet
+                                        then (value Seq.<| items, False)
+                                        else (items, True)
+trim refSet index value (items, _)    = (value Seq.<| items, False)

@@ -1,0 +1,21 @@
+a: []
+[].length
+a.length
+a.push('a')
+a
+[].push('b', 3, 'c')
+a.length
+a.push()
+a.push('ab', 3, 'ab')
+a.pop()
+a
+b: [1, [], 12]
+a.push(b)
+a
+b: a.push
+c: a.pop
+a.pop()
+c()
+b('abc')
+a
+a.length

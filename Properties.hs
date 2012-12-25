@@ -22,17 +22,21 @@ strProp "length"    str = return . Vi . length $ str
 strProp "count"     str = return (Vsf (strCount str) (str ++ ".count"))
 strProp "find"      str = return (Vsf (strFind str) (str ++ ".find"))
 strProp "substring" str = return (Vsf (strSubstring str) (str ++ ".substring"))
-strProp "toLower"   str = return . Vs . map toLower $ str
-strProp "toUpper"   str = return . Vs . map toUpper $ str
+strProp "toUpper"   str = return (Vsf (strToUpper str) (str ++ ".toUpper"))
+strProp "toLower"   str = return (Vsf (strToLower str) (str ++ ".toLower"))
+strProp x   _  = evalFail $ "string does not have the property \"" ++ x ++ "\""
 
 strCount :: String -> [Value] -> Runtime Value
 strCount str [(Vi t), (Vi f), (Vs s)] = strCount (take t str) [(Vi f), (Vs s)]
 strCount str [(Vi from), (Vs sub)] = strCount (drop from str) [(Vs sub)]
-strCount str [(Vs substr)] = return . Vi $ numMatches
-    where numMatches = length . filter (substr `isPrefixOf`) . tails $ str
+strCount str [(Vs substr)] = return . Vi . count str $ 0
+    where sublen = length substr
+          count [] n = n
+          count string n
+            | substr `isPrefixOf` string = count (drop sublen string) (n + 1)
+            | otherwise = count (tail string) n
 strCount _   _  = argFail $ "string.count([string substring, [int from," ++
                                                              "int to]])"
-
 strFind :: String -> [Value] -> Runtime Value
 strFind str [(Vi to), (Vi f), (Vs s)] = strFind (take to str) [(Vi f), (Vs s)]
 strFind str [(Vi from), (Vs s)] = strFind (drop from str) [(Vs s)] >>= addFrom
@@ -46,18 +50,22 @@ strFind _      _             = argFail $ "string.find([string substring," ++
                                                       "[int from, [int to]]])"
 
 strSubstring :: String -> [Value] -> Runtime Value
-strSubstring string [] = return . Vs $ string
+strSubstring string [(Vi j), (Vi i)] = return . Vs . drop i . take j $ string
 strSubstring string [(Vi i)] = return . Vs . drop i $ string
-strSubstring string [(Vi j), (Vi i)] = return . Vs . take j . drop i $ string
-strSubstring _      _  = argFail $ "string.substring([int from, [int to]])"
+strSubstring string [] = return . Vs $ string
+strSubstring x      _  = argFail $ "string.substring([int from, [int to]])"
 
+strToLower :: String -> [Value] -> Runtime Value
+strToLower str args  = return . Vs . map toLower $ str
+
+strToUpper :: String -> [Value] -> Runtime Value
+strToUpper str args  = return . Vs . map toUpper $ str
 
 listProp :: String -> Int -> Runtime Value
 listProp "length" i = listExtract i >>= return . Vi . Seq.length
 listProp "push"   i = return (Vbsf listPush i "list.push");
 listProp "pop"    i = return (Vbsf listPop i "list.pop");
-listProp x        _ = evalFail $ "list does not have the property \""
-                              ++ (show x) ++ "\""
+listProp x      _ = evalFail $ "list does not have the property \""++ x ++ "\""
 
 listExtract :: Int -> Runtime (Seq.Seq Value)
 listExtract i = getFromHeap i >>= valToList

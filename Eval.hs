@@ -21,6 +21,7 @@ import Properties
 type Expr = OrOp
 
 elemAssn :: Elem -> Value -> Runtime ()
+elemAssn (ElemS str i)   v = setElemHelper (return (Vs str)) (runExpr i) v
 elemAssn (ElemD name i)  v = setElemHelper (getVar name) (runExpr i) v
 elemAssn (ElemL list i)  v = setElemHelper (evalList list) (runExpr i) v
 elemAssn (ElemP paren i) v = setElemHelper (evalParen paren) (runExpr i) v
@@ -36,8 +37,9 @@ setElem (Vrl r) (Vi i) v = do (Vl list) <- getFromHeap r
                               if i >= 0 && i < Seq.length list
                               then setAtHeap r . Vl $ (Seq.update i v list)
                               else evalFail "index out of bounds"
-
-setElem (Vrl index) _ value = evalFail  "list indexing only supports integers"
+setElem (Vrl index) _ value = evalFail "list indexing only supports integers"
+setElem (Vs str)  (Vi i) _  = evalFail "cannot assign to string"
+setElem (Vs str)  _      _  = evalFail "list indexing only supports integers"
 setElem x           _ value = typeFail1 "indexing" x
 
 {- orop -}
@@ -188,6 +190,7 @@ evalObj (PropE elem   prop) = evalElem elem      >>= valProp prop
 
 {- elem -}
 evalElem :: Elem -> Runtime Value
+evalElem (ElemS str expr) = applyBinOp getElem (return (Vs str)) (runExpr expr)
 evalElem (ElemD name expr) = applyBinOp getElem (getVar name) (runExpr expr)
 evalElem (ElemL list expr) = applyBinOp getElem (evalList list) (runExpr expr)
 evalElem (ElemP pare expr) = applyBinOp getElem (evalParen pare) (runExpr expr)

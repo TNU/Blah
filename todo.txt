@@ -1,0 +1,9 @@
+- test elem
+- test memory
+- toStr and toRepl for self referencing data structures
+- function calls
+- temporary objects
+- performance optimization (loops)
+- comments
+- state using file handles
+- run from script (no automatic output)

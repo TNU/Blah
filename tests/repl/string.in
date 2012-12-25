@@ -1,0 +1,39 @@
+'abcdef'.length
+'=====|Substring|====='
+a: 'abcdefgh'
+a.substring()
+a.substring(4)
+a.substring(4, 14)
+a.substring(10)
+a.substring(2,4)
+a.substring(2,2)
+a.substring(3,4)
+a.substring(5,3)
+'=====|Count|====='
+''.count('a')
+'abcadfe'.count('a')
+b:'abcsaabefsabeg'
+b.count('de')
+b.count('ab', 4)
+b.count('ab', 11)
+b.count('ab', 11, b.length)
+b.count('ab', 10, 10 + 2)
+b.count('ab', 10, 10 + 1)
+b.count('ab', 10, 10)
+'aaaaa'.count('aa')
+'=====|Find|====='
+''.find('a')
+'abcadfe'.find('a')
+b:'abcsaabefsabeg'
+b.find('de')
+b.find('ab')
+b.find('ab', 4)
+b.find('ab', 11)
+b.find('ab', 11, b.length)
+b.find('ab', 10, 10 + 2)
+b.find('ab', 10, 10 + 1)
+b.find('ab', 10, 10)
+'aaaaa'.find('aa')
+'=====|toLower/toUpper|====='
+'AbCdEfGhIj'.toLower()
+'AbCdEfGhIj'.toUpper()

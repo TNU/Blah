@@ -1,0 +1,13 @@
+[] < [2] <= [2] <= [3] <= [4] <= [12] <= [13]
+
+n: 1000
+c: []
+
+while n > 0 then
+    a: [21, 'string', [13, Nothing], 'hi']
+    b: [a, [a], 'z']
+    a[2].push(b)
+    c: b.push
+    n: n - 1
+repeat
+c('What?')
