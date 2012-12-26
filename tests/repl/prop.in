@@ -19,3 +19,14 @@ c()
 b('abc')
 a
 a.length
+d: [12, b, c]
+b(d)
+a
+b(a)
+a
+d.push(a)
+a
+d
+e: [1]
+f: [e, e]
+f

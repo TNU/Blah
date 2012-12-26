@@ -66,7 +66,7 @@ visit action seen (Vl list) = addBrackets `liftM` elemsToRepr
           oneToRepr 0 x = visit toRepr seen x
           oneToRepr _ x = (", " ++) `liftM` visit toRepr seen x
 visit action seen (Vrl index)
-    | Set.member index seen = return "..."
+    | Set.member index seen = return "[...]"
     | otherwise             = getFromHeap index >>= visit action newSeen
         where newSeen = Set.insert index seen
 visit action seen value = action value
