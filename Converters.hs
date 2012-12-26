@@ -6,6 +6,7 @@ module Converters (
 ) where
 
 import Control.Monad (liftM, liftM2)
+import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as Fold
 
@@ -24,24 +25,26 @@ toBool (Vsf _ _)    = return True
 toBool (Vbsf _ _ _) = return True
 
 toStr :: Value -> Runtime String
-toStr Vnothing          = return "Nothing"
-toStr (Vb bool)         = return . show $ bool
-toStr (Vi int)          = return . show $ int
-toStr (Vs string)       = return string
-toStr (Vl list)         = listToRepr list
-toStr (Vrl index)       = getFromHeap index >>= toStr
-toStr (Vsf _ name)      = return $ name ++ "(..)"
-toStr (Vbsf _ i name)   = return $ (show i) ++ ":" ++ name ++ "(..)"
+toStr value = visit oneToStr (Set.empty) value
+
+oneToStr :: Value -> Runtime String
+oneToStr Vnothing          = return "Nothing"
+oneToStr (Vb bool)         = return . show $ bool
+oneToStr (Vi int)          = return . show $ int
+oneToStr (Vs string)       = return string
+oneToStr (Vsf _ name)      = return $ name ++ "(..)"
+oneToStr (Vbsf _ i name)   = return $ (show i) ++ ":" ++ name ++ "(..)"
 
 toRepr :: Value -> Runtime String
-toRepr Vnothing     = return "Nothing"
-toRepr (Vi int)     = return . show $ int
-toRepr (Vb bool)    = return . show $ bool
-toRepr (Vl list)    = listToRepr list
-toRepr (Vrl index)  = getFromHeap index >>= toRepr
-toRepr (Vsf _ name) = return $ name ++ "(..)"
-toRepr (Vbsf _ i name) = return $ (show i) ++ ":" ++ name ++ "(..)"
-toRepr (Vs string)  = return $ "'" ++ concatMap esc string ++ "'"
+toRepr value = visit oneToRepr (Set.empty) value
+
+oneToRepr :: Value -> Runtime String
+oneToRepr Vnothing     = return "Nothing"
+oneToRepr (Vi int)     = return . show $ int
+oneToRepr (Vb bool)    = return . show $ bool
+oneToRepr (Vsf _ name) = return $ name ++ "(..)"
+oneToRepr (Vbsf _ i name) = return $ (show i) ++ ":" ++ name ++ "(..)"
+oneToRepr (Vs string)  = return $ "'" ++ concatMap esc string ++ "'"
     where esc '\a' = "\\a"
           esc '\b' = "\\b"
           esc '\f' = "\\f"
@@ -55,13 +58,18 @@ toRepr (Vs string)  = return $ "'" ++ concatMap esc string ++ "'"
           esc '\0' = "\\0"
           esc x    = [x]
 
-listToRepr :: Seq.Seq Value -> Runtime String
-listToRepr seq = addBrackets `liftM` elemsToRepr
+visit :: (Value -> Runtime String) -> Set.Set Int -> Value -> Runtime String
+visit action seen (Vl list) = addBrackets `liftM` elemsToRepr
     where addBrackets elems = "[" ++ elems ++ "]"
           elemsToRepr   = Fold.foldr (liftM2 (++)) (return "") eachToRepr
-          eachToRepr    = Seq.mapWithIndex oneToRepr seq
-          oneToRepr 0 x = toRepr x
-          oneToRepr _ x = (", " ++) `liftM` toRepr x
+          eachToRepr    = Seq.mapWithIndex oneToRepr list
+          oneToRepr 0 x = visit toRepr seen x
+          oneToRepr _ x = (", " ++) `liftM` visit toRepr seen x
+visit action seen (Vrl index)
+    | Set.member index seen = return "..."
+    | otherwise             = getFromHeap index >>= visit action newSeen
+        where newSeen = Set.insert index seen
+visit action seen value = action value
 
 deref :: Value -> Runtime Value
 deref (Vrl i) = getFromHeap i
