@@ -33,6 +33,6 @@ typeFail2 opName x y = evalFail $ opName ++ " of \""
                               ++ (show x) ++ "\" and \"" ++ (show y) ++ "\" "
                               ++ "is not supported"
 
-argFail :: (Monad m) => String -> ErrorT Failure m b
+argFail :: (Monad m) => String -> ErrorT Failure m a
 argFail expected = evalFail $ "unexpected arguments, expected " ++ expected
 

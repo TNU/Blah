@@ -1,6 +1,6 @@
 - test elem
 - test memory
-- toStr and toRepl for self referencing data structures
+- function definitions
 - function calls
 - temporary objects
 - performance optimization (loops)

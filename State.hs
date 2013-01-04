@@ -8,12 +8,10 @@ module State (
     setAtHeap,
     getFromHeap,
 
+    usingIO,
     isEOF,
     readLine,
-    showStr,
-    showLine,
-    usingState,
-    usingIO,
+    writeLine,
     run,
     newRuntime,
 ) where
@@ -34,7 +32,7 @@ import Memory
 
 type Scope          = Map.Map String Value
 type Heap           = Memory Value
-type StateData      = (Scope, Heap)
+type StateData      = (IO.Handle, Scope, Heap)
 type RuntimeState   = StateT StateData IO
 type Runtime        = Failable RuntimeState
 
@@ -53,23 +51,16 @@ data Value = Vnothing
 
 {- State Modifiers -}
 setVar :: String -> Value -> Runtime ()
-setVar name val = do (scope, heap) <- usingState get
+setVar name val = do (input, scope, heap) <- usingState get
                      let newScope = Map.insert name val scope
                          newHeap = if numInserts heap > 5
                                    then gc heap newScope
                                    else heap
-                     usingState . put $ (newScope, newHeap)
-
-printScope :: Scope -> Runtime ()
-printScope = showStr . show . Map.toList
-
-printHeap :: Heap -> Runtime ()
-printHeap (Memory seq set  _) = showStr (show (Fold.toList seq) ++
-                                         show (Set.toList set))
+                     usingState . put $ (input, newScope, newHeap)
 
 getVar ::  String -> Runtime Value
 getVar name = usingState get >>= find
-    where find (scope, _) = toVal (Map.lookup name scope)
+    where find (_, scope, _) = toVal (Map.lookup name scope)
           toVal (Just val)   = return val
           toVal Nothing      = evalFail  $ "variable " ++ (show name)
                                         ++ " does not exist"
@@ -94,30 +85,31 @@ getFromHeap index = do heap <- getHeap
                        else evalFail $ "heap index out of bounds at "
                                     ++ (show index)
 
+getInput :: Runtime IO.Handle
+getInput = usingState get >>= onlyInput
+    where onlyInput (input, _, _) = return input
+
 getScope :: Runtime Scope
 getScope = usingState get >>= onlyScope
-    where onlyScope (scope, _) = return scope
+    where onlyScope (_, scope, _) = return scope
 
 getHeap :: Runtime Heap
 getHeap = usingState get >>= onlyHeap
-    where onlyHeap (_, heap) = return heap
+    where onlyHeap (_, _, heap) = return heap
 
 setHeap :: Heap -> Runtime ()
 setHeap = usingState . modify . set
-    where set heap (scope, _) = (scope, heap)
+    where set heap (input, scope, _) = (input, scope, heap)
 
 {- IO Operations -}
 readLine :: Runtime String
-readLine = usingIO getLine
+readLine = getInput >>= usingIO . IO.hGetLine
 
 isEOF :: Runtime Bool
-isEOF = usingIO IO.isEOF
+isEOF = getInput >>= usingIO . IO.hIsEOF
 
-showStr :: String -> Runtime ()
-showStr = usingIO . putStrLn
-
-showLine :: String -> Runtime ()
-showLine = usingIO . putStrLn
+writeLine :: String -> Runtime ()
+writeLine = usingIO . putStrLn
 
 usingState :: RuntimeState a -> Runtime a
 usingState = lift
@@ -128,8 +120,8 @@ usingIO = lift . lift
 run :: Runtime a -> StateData -> IO (Either Failure a)
 run = evalStateT . runErrorT
 
-newRuntime :: Scope -> StateData
-newRuntime scope = (scope, newMemory)
+newRuntime :: IO.Handle -> Scope -> StateData
+newRuntime input scope = (input, scope, newMemory)
 
 {- Value -}
 instance Show Value where
