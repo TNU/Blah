@@ -3,7 +3,7 @@ import Control.Exception (handle, IOException)
 import qualified System.Environment as Env
 import qualified System.IO as IO
 
-import Coder
+import Blah
 
 main = Env.getArgs >>= decideRunner
     where decideRunner [] = runRepl

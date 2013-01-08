@@ -1,4 +1,4 @@
-module Coder (
+module Blah (
     runRepl,
     runScript
 ) where
