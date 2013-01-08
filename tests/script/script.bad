@@ -1,0 +1,7 @@
+writeLine('You should not see this.')
+if True then
+    writeline('It is true.')
+otherwise
+    writeline('It is false.')
+
+writeline('Oh no I didn\'t close this line')

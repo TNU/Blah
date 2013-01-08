@@ -37,7 +37,6 @@ grep_match() {
     local outputFile="$3"
 
     local failed="FALSE"
-    ./main < "$badFile" > "$outputFile"
 
     exec 3<"$outputFile"
     exec 4<"$errorsFile"

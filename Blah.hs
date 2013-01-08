@@ -50,13 +50,12 @@ replFail :: String -> Runtime ()
 replFail = writeLine . ("<repl> " ++)
 
 runScript :: IO.Handle -> IO ()
-runScript file = do
-        ast <- run scriptParse (newRuntime file Map.empty)
-        case verifyAST ast of
-            (Left message) -> putStrLn message
-            (Right decls) -> do
-                run (script decls) (newRuntime IO.stdin sysFuncs)
-                return ()
+runScript file = do ast <- run scriptParse (newRuntime file Map.empty)
+                    case verifyAST ast of
+                        (Left message) -> putStrLn message
+                        (Right decls) -> do
+                            run (script decls) (newRuntime IO.stdin sysFuncs)
+                            return ()
 
 scriptParse :: Runtime [Decl]
 scriptParse = scriptParseLine []
@@ -80,7 +79,6 @@ verifyAST (Right decls)
           isValidDecl _        = False
           scriptFail        = Left . ("<script> " ++)
 verifyAST errorMessage      = errorMessage
-
 
 script :: [Decl] -> Runtime ()
 script lines = scriptLine lines `catchError` writeLine
