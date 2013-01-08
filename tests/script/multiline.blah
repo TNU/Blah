@@ -1,0 +1,26 @@
+writeLine('hello')
+a: 7
+b: 5
+condition: False
+if a > b then
+    writeLine('a is greater than b')
+    condition: True
+else if a = b then
+    writeLine('a is equal to b')
+otherwise
+    writeLine('a is less than b')
+fi
+
+if condition then
+    writeLine('
+I\'m going to write a multiline poem
+and this is how the poem goes
+and this is how the poem ends
+')
+    writeLine('how about another line')
+    writeLine('how about yet another line')
+
+    if condition and 5 < 7 then
+        writeLine('this makes sense')
+    fi
+fi
