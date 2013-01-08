@@ -1,9 +1,7 @@
 - test elem
 - test memory
 - function definitions
-- function calls
 - temporary objects
 - performance optimization (loops)
 - comments
-- state using file handles
-- run from script (no automatic output)
+- not operator

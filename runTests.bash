@@ -114,12 +114,18 @@ for badFile in "$replTestDir"*".bad"; do
     fi
 done
 
-for inputFile in "$scriptTestDir"*".in"; do
-    testCase="${inputFile%.in}"
+for blahFile in "$scriptTestDir"*".blah"; do
+    testCase="${blahFile%.blah}"
+    blahFile="$testCase.blah"
+    inputFile="$testCase.in"
     wantedFile="$testCase.wnt"
     outputFile="$testCase.out"
 
-    ./main "$inputFile" > "$outputFile"
+    if [ -e "$inputFile" ]; then
+        ./main "$blahFile" < "$inputFile" > "$outputFile"
+    else
+        ./main "$blahFile" > "$outputFile"
+    fi
 
     if ! exact_match "$testCase" "$wantedFile" "$outputFile"; then
         failed="TRUE"

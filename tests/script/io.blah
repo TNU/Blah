@@ -1,0 +1,18 @@
+writeLine(isEOF())
+firstLine: readLine()
+writeLine(isEOF())
+in: readLine
+secondLine: in()
+write(isEOF())
+write(',')
+write(readLine())
+write(' ')
+out: write
+out(Nothing)
+writeLine('|')
+out(13, -54)
+write('\n')
+write(True, False)
+writeLine()
+writeLine(1, firstLine)
+writeLine(2 & ' ' & secondLine)

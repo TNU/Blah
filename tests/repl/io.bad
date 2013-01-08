@@ -1,0 +1,4 @@
+readLine('hello')
+readLine('hello', 'whatever')
+isEOF('what')
+isEOF(1, 2, 3)

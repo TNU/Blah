@@ -32,8 +32,12 @@ readLine [] = State.isEOF >>= readOne
 readLine _  = argFail "readLine()"
 
 write :: [Value] -> Runtime Value
-write strings = mapM_ writeValue strings >> return Vnothing
-    where writeValue value = toStr value >>= State.usingIO . putStr
+write values = writeValues values >> return Vnothing
+    where writeValues [] = return ()
+          writeValues [value] = writeSingle value
+          writeValues (value:rest) = writeValues rest >> writeOne value
+          writeSingle value = toStr value >>= State.usingIO . putStr
+          writeOne value = State.usingIO (putStr " ") >> writeSingle value
 
 writeLine :: [Value] -> Runtime Value
-writeLine strings = write strings >> State.writeLine "" >> return Vnothing
+writeLine values = write values >> State.writeLine "" >> return Vnothing
