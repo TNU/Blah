@@ -7,6 +7,7 @@ module Parser (
     Decl(..),
     OrOp(..),
     AndOp(..),
+    NotOp(..),
     Comp(..),
     Join(..),
     Arth(..),
@@ -34,6 +35,7 @@ data Decl = Dl Line
           | Ds Stmt
           | Db OrOp
           | Dd AndOp
+          | Dm NotOp
           | Dc Comp
           | Dj Join
           | Da Arth
@@ -76,9 +78,13 @@ data OrOp = Oa AndOp
           | Or OrOp AndOp
           deriving (Show, Eq)
 
-data AndOp = Ac Comp
-          | And AndOp Comp
-          deriving (Show, Eq)
+data AndOp = An NotOp
+           | And AndOp NotOp
+           deriving (Show, Eq)
+
+data NotOp = Mc Comp
+           | Not Comp
+           deriving (Show, Eq)
 
 data Comp = Cj  Join
           | Lt  Comp Join
@@ -152,8 +158,8 @@ data Paren = Pe OrOp
            deriving (Show, Eq)
 
 parse :: [Decl] -> [Token] -> Runtime [Decl]
-parse []    = shift []
-parse decls = reduce (demoteLast decls)
+parse []          = shift []
+parse (last:rest) = reduce ((demote last):rest)
 
 shift :: [Decl] -> [Token] -> Runtime [Decl]
 shift decls (tok:tokens) = reduce ((Dk tok):decls) tokens
@@ -266,10 +272,14 @@ reduce ((Dj join):(Dk TLT):(Dc comp):rest)  tokens = reduce ((Dc (Lt  comp join)
 reduce ((Dj join):(Dk TEQ):(Dc comp):rest)  tokens = reduce ((Dc (Eq  comp join)):rest)  tokens
 reduce ((Dj join):(Dk TGT):(Dc comp):rest)  tokens = reduce ((Dc (Gt  comp join)):rest)  tokens
 
+{- not operation -}  -- not operation not allowed across lines
+reduce decls@((Dk NOT):rest) tokens@(_:_) = shift decls tokens
+reduce ((Dc comp):(Dk NOT):rest)   tokens = reduce ((Dm (Not comp)):rest) tokens
+
 {- and operation -}
-reduce decls@((Dd andop):rest)      tokens@(AND:_) = shift decls tokens
-reduce decls@((Dk AND):(Dd andop):rest)     tokens = shift decls tokens
-reduce ((Dc comp):(Dk AND):(Dd andop):rest) tokens = reduce ((Dd (And andop comp)):rest)  tokens
+reduce decls@((Dd andop):rest)       tokens@(AND:_) = shift decls tokens
+reduce decls@((Dk AND):(Dd andop):rest)      tokens = shift decls tokens
+reduce ((Dm notop):(Dk AND):(Dd andop):rest) tokens = reduce ((Dd (And andop notop)):rest)  tokens
 
 {- or operation -}
 reduce decls@((Db orop):rest)       tokens@(OR:_) = shift decls tokens
@@ -330,7 +340,7 @@ reduce decls@((Ds stmt):Dnewline:(Dl line):rs) tokens = reduce ((Dl (Lm line stm
 
 {- negation -}  -- negation not allowed across lines
 reduce decls@((Dk MINUS):rest)               tokens@(_:_) = shift decls tokens
-reduce ((Dn neg):(Dk MINUS):rest) tokens | negatable rest = reduce (Df (Fn neg):rest) tokens
+reduce ((Dn neg):(Dk MINUS):rest) tokens | negatable rest = reduce ((Df (Fn neg)):rest) tokens
     where negatable ((Da _):xs) = False
           negatable _           = True
 
@@ -350,7 +360,8 @@ reduce ((Df fact):rest)      tokens = reduce ((Dt (Tf fact)):rest)  tokens
 reduce ((Dt term):rest)      tokens = reduce ((Da (At term)):rest)  tokens
 reduce ((Da arth):rest)      tokens = reduce ((Dj (Ja arth)):rest)  tokens
 reduce ((Dj join):rest)      tokens = reduce ((Dc (Cj join)):rest)  tokens
-reduce ((Dc comp):rest)      tokens = reduce ((Dd (Ac comp)):rest)  tokens
+reduce ((Dc comp):rest)      tokens = reduce ((Dm (Mc comp)):rest)  tokens
+reduce ((Dm notop):rest)     tokens = reduce ((Dd (An notop)):rest)  tokens
 reduce ((Dd andop):rest)     tokens = reduce ((Db (Oa andop)):rest) tokens
 reduce ((Db orop):rest)      tokens = reduce ((Ds (Se orop)):rest)  tokens
 reduce ((Ds stmt):rest)      tokens = reduce ((Dl (Ls stmt)):rest)  tokens
@@ -360,14 +371,11 @@ reduce decls@[Dl _] []      = return decls
 reduce decls        tokens  = parseFail $ (show decls) ++ " " ++ (show tokens)
 
 {- demotions -}
-demoteLast :: [Decl] -> [Decl]
-demoteLast (x:xs)  = (demote x):xs
-demoteLast []      = []
-
 demote :: Decl -> Decl
 demote (Ds (Se orop))  = demote (Db orop)
 demote (Db (Oa andop)) = demote (Dd andop)
-demote (Dd (Ac comp))  = demote (Dc comp)
+demote (Dd (An notop)) = demote (Dm notop)
+demote (Dm (Mc comp))  = demote (Dc comp)
 demote (Dc (Cj join))  = demote (Dj join)
 demote (Dj (Ja arth))  = demote (Da arth)
 demote (Da (At term))  = demote (Dt term)

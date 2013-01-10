@@ -18,3 +18,11 @@ a
 '' and 'maybe' or 'not'
 b: ''
 b or b & 'you'
+not True
+not False
+not Nothing
+not 'Something'
+True and not True
+False or not False
+not (True and False)
+False or not (False or False)

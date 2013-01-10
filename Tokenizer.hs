@@ -22,7 +22,7 @@ data Token = INT Int
            | CONCAT
            | TLT | TEQ | TGT
            | TLTE | TGTE | TNE
-           | AND | OR
+           | AND | OR | NOT
            | COLON
            | IF | THEN | ELSE | OTHER | FI
            | WHILE | REPEAT
@@ -41,6 +41,7 @@ keywords = Map.fromList [
         ("Nothing",   NOTHING),
         ("and",       AND),
         ("or",        OR),
+        ("not",       NOT),
         ("if",        IF),
         ("then",      THEN),
         ("else",      ELSE),
@@ -51,12 +52,9 @@ keywords = Map.fromList [
     ]
 
 tokenize :: Runtime [Token]
-tokenize = do
-    isEof <- isEOF
-    if isEof
-    then return []
-    else do line <- readLine
-            tokenizeLineStr line
+tokenize = isEOF >>= ifIsEOF
+    where ifIsEOF True  = return []
+          ifIsEOF False = readLine >>= tokenizeLineStr
 
 tokenizeLineStr :: String -> Runtime [Token]
 tokenizeLineStr [] = return []
@@ -89,6 +87,7 @@ getOneToken ('.':xs)     = addToken DOT     xs
 getOneToken (',':xs)     = addToken COMMA   xs
 
 getOneToken ('\'':xs)    = getStr xs
+getOneToken ('#':xs)     = return []
 
 getOneToken str@(x:xs)
     | isDigit x     = getNum str
@@ -129,9 +128,9 @@ getStr ('\\':'u':a:b:c:d:rest)
     | all isHexDigit [a,b,c,d] = addChar (chr (parseInt 16 [a,b,c,d])) rest
 getStr ('\\':'0':rest)   = addChar '\0' rest
 getStr (x:rest)          = addChar x    rest
-getStr [] = do isEof <- isEOF
-               if isEof then tokenizeFail $ "unterminated string"
-                        else readLine >>= addChar '\n'
+getStr [] = isEOF >>= ifIsEOF
+    where ifIsEOF True  = tokenizeFail $ "unterminated string"
+          ifIsEOF False = readLine >>= addChar '\n'
 
 parseInt :: Int -> String -> Int
 parseInt radix = foldl (\acc x -> acc * radix + digitToInt x) 0

@@ -50,12 +50,19 @@ evalOrop (Or x y)  = applyBinOp doOr (evalOrop x) (evalAndOp y)
 
 {- andop -}
 evalAndOp :: AndOp -> Runtime (Bool, Value)
-evalAndOp (Ac x)    = evalComp x >>= toAndOp
-evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalComp y)
-    where doAnd a@(t,_) b = if t then toAndOp b else return a
+evalAndOp (An x)    = evalNot x
+evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalNot y)
+    where doAnd a@(t,_) b = if t then return b else return a
 
-toAndOp :: (Bool, Value, Value) -> Runtime (Bool, Value)
-toAndOp (_, _, x) = toBool x >>= \bool -> return (bool, x)
+{- notop -}
+evalNot :: NotOp -> Runtime (Bool, Value)
+evalNot (Mc x)      = evalComp x >>= toNotOp
+evalNot (Not x)     = evalComp x >>= toNotOp >>= doNot
+    where doNot (bool, value) = makeNotOp (not bool)
+          makeNotOp bool = return (bool, Vb bool)
+
+toNotOp :: (Bool, Value, Value) -> Runtime (Bool, Value)
+toNotOp (_, _, x) = toBool x >>= \bool -> return (bool, x)
 
 {- comp -}
 evalComp :: Comp -> Runtime (Bool, Value, Value)

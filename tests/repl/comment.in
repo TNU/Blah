@@ -1,0 +1,18 @@
+# this should be ignored
+if True then
+    'You should see this'
+    # but not this
+    #because this is a comment
+    'You should also see this'#but not his
+    '
+Hash signs in strings #have
+#no effect'#but this does
+otherwise
+    'You should not see this'
+fi
+
+#
+a: [1, 2, #3,
+    4, 5]
+a
+
