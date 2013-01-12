@@ -1,0 +1,4 @@
+n: 1000000
+while n > 0 then
+    n: n - 1
+repeat
