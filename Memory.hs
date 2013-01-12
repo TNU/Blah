@@ -8,12 +8,12 @@ module Memory (
     newMemory,
 ) where
 
-import Data.Foldable as Fold
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 
 data Memory v = Memory (Seq.Seq v) (Set.Set Int) Int
 
+newMemory :: Memory v
 newMemory = Memory Seq.empty Set.empty 0
 
 numInserts :: Memory v -> Int

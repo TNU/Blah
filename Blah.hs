@@ -3,7 +3,6 @@ module Blah (
     runScript
 ) where
 
-import Control.Monad.Trans.State (evalState)
 import Control.Monad.Trans.Error (catchError)
 
 import qualified System.IO as IO
@@ -44,24 +43,23 @@ replLine unmatched = do
         else parseError parseRestLine >>= replLine
     where parseRestLine = tokenize >>= parse unmatched
           parseError state = state `catchError` handleError
-          handleError error = writeLine error >> return []
+          handleError errorMessage = writeLine errorMessage >> return []
 
 replFail :: String -> Runtime ()
 replFail = writeLine . ("<repl> " ++)
 
 runScript :: IO.Handle -> IO ()
-runScript file = do ast <- run scriptParse (newRuntime file Map.empty)
-                    case verifyAST ast of
-                        (Left message) -> putStrLn message
-                        (Right decls) -> do
-                            run (script decls) (newRuntime IO.stdin sysFuncs)
-                            return ()
+runScript file = parseScript >>= runOrShowError . verifyAST
+    where parseScript = run scriptParse (newRuntime file Map.empty)
+          runOrShowError (Left message) = putStrLn message
+          runOrShowError (Right decls)  = runAST decls >> return ()
+          runAST decls = run (script decls) (newRuntime IO.stdin sysFuncs)
 
 scriptParse :: Runtime [Decl]
 scriptParse = scriptParseLine []
 
 scriptParseLine :: [Decl] -> Runtime [Decl]
-scriptParseLine rest@((Dl line):_) = scriptParseLine (Dnewline:rest)
+scriptParseLine rest@((Dl _):_) = scriptParseLine (Dnewline:rest)
 scriptParseLine decls = do isEof <- isEOF
                            if isEof
                            then return decls
@@ -81,11 +79,12 @@ verifyAST (Right decls)
 verifyAST errorMessage      = errorMessage
 
 script :: [Decl] -> Runtime ()
-script lines = scriptLine lines `catchError` writeLine
+script line = scriptLine line `catchError` writeLine
 
 scriptLine :: [Decl] -> Runtime ()
 scriptLine []               = return ()
 scriptLine (Dnewline:rest)  = script rest
 scriptLine ((Dl line):rest) = runLine line ignore >> script rest
     where ignore val = return ()
+scriptLine (decl:rest)  = error $ "unexpected decl in script: " ++ (show decl)
 

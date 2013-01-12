@@ -6,8 +6,6 @@ module Eval (
 ) where
 
 import Control.Monad (liftM, liftM2, liftM3, join)
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Error
 
 import qualified Data.Foldable as Fold
 import qualified Data.Sequence as Seq
@@ -27,7 +25,7 @@ elemAssn (ElemL list i)  v = setElemHelper (evalList list) (runExpr i) v
 elemAssn (ElemP paren i) v = setElemHelper (evalParen paren) (runExpr i) v
 elemAssn (ElemC call i)  v = setElemHelper (evalCall call) (runExpr i) v
 elemAssn (ElemO obj i)   v = setElemHelper (evalObj obj) (runExpr i) v
-elemAssn (ElemE elem i)  v = setElemHelper (evalElem elem) (runExpr i) v
+elemAssn (ElemE ele i)   v = setElemHelper (evalElem ele) (runExpr i) v
 
 setElemHelper :: Runtime Value -> Runtime Value -> Value -> Runtime ()
 setElemHelper a b c = join (liftM3 setElem a b (return c))
@@ -37,10 +35,10 @@ setElem (Vrl r) (Vi i) v = do (Vl list) <- getFromHeap r
                               if i >= 0 && i < Seq.length list
                               then setAtHeap r . Vl $ (Seq.update i v list)
                               else evalFail "index out of bounds"
-setElem (Vrl index) _ value = evalFail "list indexing only supports integers"
-setElem (Vs str)  (Vi i) _  = evalFail "cannot assign to string"
-setElem (Vs str)  _      _  = evalFail "list indexing only supports integers"
-setElem x           _ value = typeFail1 "indexing" x
+setElem (Vrl _)  _     _ = evalFail "list indexing only supports integers"
+setElem (Vs _)  (Vi _) _ = evalFail "cannot assign to string"
+setElem (Vs _)  _      _ = evalFail "list indexing only supports integers"
+setElem x       _      _ = typeFail1 "indexing" x
 
 {- orop -}
 evalOrop :: OrOp -> Runtime (Bool, Value)
@@ -58,7 +56,7 @@ evalAndOp (And x y) = applyBinOp doAnd (evalAndOp x) (evalNot y)
 evalNot :: NotOp -> Runtime (Bool, Value)
 evalNot (Mc x)      = evalComp x >>= toNotOp
 evalNot (Not x)     = evalComp x >>= toNotOp >>= doNot
-    where doNot (bool, value) = makeNotOp (not bool)
+    where doNot (bool, _) = makeNotOp (not bool)
           makeNotOp bool = return (bool, Vb bool)
 
 toNotOp :: (Bool, Value, Value) -> Runtime (Bool, Value)
@@ -72,11 +70,11 @@ evalComp (Eq x y)   = doComp eqOp (evalComp x) (evalJoin y)
 evalComp (Gt x y)   = doComp gtOp (evalComp x) (evalJoin y)
     where gtOp      = flip ltOp
 evalComp (Lte x y)  = doComp lteOp(evalComp x) (evalJoin y)
-    where lteOp x y = not `liftM` ltOp y x
+    where lteOp a b = not `liftM` ltOp b a
 evalComp (Gte x y)  = doComp gteOp (evalComp x) (evalJoin y)
-    where gteOp x y = not `liftM` ltOp x y
+    where gteOp a b = not `liftM` ltOp a b
 evalComp (Neq x y)  = doComp neOp (evalComp x) (evalJoin y)
-    where neOp x y  = not `liftM` eqOp x y
+    where neOp a b  = not `liftM` eqOp a b
 
 toComp :: Value -> Runtime (Bool, Value, Value)
 toComp x = deref x >>= \y -> return (True, y, x)
@@ -112,39 +110,39 @@ eqOp (Vl x) (Vl y) = (lengthEq &&) `liftM` allEq
           eqOnVals a b = applyBinOp eqOp (deref a) (deref b)
 
 eqOp Vnothing Vnothing = return True
-eqOp (Vi x) (Vi y)             = return (x == y)
-eqOp (Vb x) (Vb y)             = return (x == y)
-eqOp (Vs x) (Vs y)             = return (x == y)
-eqOp (Vsf _ x) (Vsf _ y)       = return (x == y)
+eqOp (Vi x)        (Vi y)      = return (x == y)
+eqOp (Vb x)        (Vb y)      = return (x == y)
+eqOp (Vs x)        (Vs y)      = return (x == y)
+eqOp (Vsf _ x)     (Vsf _ y)   = return (x == y)
 eqOp (Vbsf _ i x) (Vbsf _ j y) = return $ (i == j) && (x == y)
-eqOp x      y                  = return False
+eqOp _            _            = return False
 
 {- join -}
 evalJoin :: Join -> Runtime Value
 evalJoin (Ja x)       = evalArth x
 evalJoin (Concat x y) = applyBinOpOnVal conc (evalJoin x) (evalArth y)
-    where conc x y = Vs `liftM` liftM2 (++) (toStr x) (toStr y)
+    where conc a b = Vs `liftM` liftM2 (++) (toStr a) (toStr b)
 
 {- arth -}
 evalArth :: Arth -> Runtime Value
 evalArth (At x)     = evalTerm x
 evalArth (Add x y)  = applyBinOpOnVal add (evalArth x) (evalTerm y)
-    where add (Vi x) (Vi y) = return . Vi $ (x + y)
-          add x      y      = typeFail2 "addition" x y
+    where add (Vi i) (Vi j) = return . Vi $ (i + j)
+          add a      b      = typeFail2 "addition" a b
 evalArth (Sub x y)  = applyBinOpOnVal sub (evalArth x) (evalTerm y)
-    where sub (Vi x) (Vi y) = return . Vi $ (x - y)
-          sub x      y      = typeFail2 "subtraction" x y
+    where sub (Vi i) (Vi j) = return . Vi $ (i - j)
+          sub a      b      = typeFail2 "subtraction" a b
 
 {- term -}
 evalTerm :: Term -> Runtime Value
 evalTerm (Tf x) = evalFact x
 evalTerm (Mult x y) = applyBinOpOnVal mult (evalTerm x) (evalFact y)
-    where mult (Vi x) (Vi y) = return . Vi $ (x * y)
-          mult x      y      = typeFail2 "multiplication" x y
+    where mult (Vi i) (Vi j) = return . Vi $ (i * j)
+          mult a      b      = typeFail2 "multiplication" a b
 evalTerm (Div x y) = applyBinOpOnVal divide (evalTerm x) (evalFact y)
-    where divide (Vi x) (Vi 0) = evalFail "divide by zero"
-          divide (Vi x) (Vi y) = return . Vi $ (x `div` y)
-          divide x      y      = typeFail2 "division" x y
+    where divide (Vi _) (Vi 0) = evalFail "divide by zero"
+          divide (Vi i) (Vi j) = return . Vi $ (i `div` j)
+          divide a      b      = typeFail2 "division" a b
 
 {- fact -}
 evalFact :: Factor -> Runtime Value
@@ -154,16 +152,17 @@ evalFact (Fs x)     = return . Vs $ x
 evalFact (Fl x)     = evalList x
 evalFact (Fp x)     = evalNeg x
 evalFact (Fn x)     = evalNeg x >>= negateVal
-    where negateVal (Vi x)   = return . Vi . negate $ x
-          negateVal x        = typeFail1 "negation" x
+    where negateVal (Vi i)   = return . Vi . negate $ i
+          negateVal a        = typeFail1 "negation" a
 
 {- list -}
 evalList :: List -> Runtime Value
 evalList list = Vrl `liftM` (makeList list >>= addToHeap)
     where makeList Lempty         = return (Vl Seq.empty)
           makeList (Lone x)       = (Vl . Seq.singleton) `liftM` runExpr x
-          makeList (Lcons list x) = liftM2 append (runExpr x) (makeList list)
-          append val (Vl list) = Vl $ (list Seq.|> val)
+          makeList (Lcons l x) = liftM2 append (runExpr x) (makeList l)
+          append val (Vl l) = Vl $ (l Seq.|> val)
+          append _   _      = error "appending to something not a list"
 
 {- neg -}
 evalNeg :: Neg -> Runtime Value
@@ -193,7 +192,7 @@ evalObj (PropD name   prop) = getVar name        >>= valProp prop
 evalObj (PropL list   prop) = evalList list      >>= valProp prop
 evalObj (PropP paren  prop) = evalParen paren    >>= valProp prop
 evalObj (PropO obj    prop) = evalObj obj        >>= valProp prop
-evalObj (PropE elem   prop) = evalElem elem      >>= valProp prop
+evalObj (PropE ele    prop) = evalElem ele       >>= valProp prop
 
 {- elem -}
 evalElem :: Elem -> Runtime Value
@@ -203,19 +202,19 @@ evalElem (ElemL list expr) = applyBinOp getElem (evalList list) (runExpr expr)
 evalElem (ElemP pare expr) = applyBinOp getElem (evalParen pare) (runExpr expr)
 evalElem (ElemC call expr) = applyBinOp getElem (evalCall call) (runExpr expr)
 evalElem (ElemO obj  expr) = applyBinOp getElem (evalObj obj)   (runExpr expr)
-evalElem (ElemE elem expr) = applyBinOp getElem (evalElem elem) (runExpr expr)
+evalElem (ElemE ele  expr) = applyBinOp getElem (evalElem ele) (runExpr expr)
 
 getElem :: Value -> Value -> Runtime Value
 getElem (Vs string) (Vi i) = if i >= 0 && i < length string
                              then return . Vs $ [string !! i]
                              else evalFail "index out of bounds"
-getElem (Vs str) _         = evalFail "string indexing only supports integers"
+getElem (Vs _)      _      = evalFail "string indexing only supports integers"
 getElem (Vrl index) (Vi i) = do (Vl list) <- getFromHeap index
                                 if i >= 0 && i < Seq.length list
                                 then return (Seq.index list i)
                                 else evalFail "index out of bounds"
-getElem (Vrl index) _      = evalFail  "list indexing only supports integers"
-getElem x         _        = typeFail1 "indexing" x
+getElem (Vrl _)     _      = evalFail  "list indexing only supports integers"
+getElem x           _      = typeFail1 "indexing" x
 
 
 {- paren -}

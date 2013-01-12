@@ -81,7 +81,7 @@ grep_match() {
     fi
 }
 
-ghc --make main.hs
+ghc -Wall --make main.hs
 
 if [ $? -ne 0 ]; then
     echo '#Compilation Failed#'

@@ -5,7 +5,7 @@ module Tokenizer (
 
 import qualified Data.Map as Map
 
-import Control.Monad (liftM, liftM2)
+import Control.Monad (liftM)
 import Data.Char (isDigit, isAlpha, isOctDigit, isHexDigit, digitToInt, chr)
 
 import Failure (tokenizeFail)
@@ -30,8 +30,7 @@ data Token = INT Int
            | COMMA
            deriving (Show, Eq)
 
-isNewline x = x `elem` "\n\r"
-isSpace x   = x `elem` " \f\t\v"
+isId :: Char -> Bool
 isId x      = isAlpha x || x == '_'
 
 keywords :: Map.Map String Token
@@ -54,46 +53,48 @@ keywords = Map.fromList [
 tokenize :: Runtime [Token]
 tokenize = isEOF >>= ifIsEOF
     where ifIsEOF True  = return []
-          ifIsEOF False = readLine >>= tokenizeLineStr
+          ifIsEOF False = readLine >>= getNextToken
 
-tokenizeLineStr :: String -> Runtime [Token]
-tokenizeLineStr [] = return []
-tokenizeLineStr (x:xs)
-    | isNewline x   = return []
-    | isSpace x     = tokenizeLineStr xs
-tokenizeLineStr str = getOneToken str
+getNextToken :: String -> Runtime [Token]
+getNextToken ('\n':_)     = return []
+getNextToken ('\r':_)     = return []
+getNextToken ('#':_)      = return []
 
-addToken :: Token -> String -> Runtime [Token]
-addToken token rest = (token:) `liftM` tokenizeLineStr rest
+getNextToken (' ':xs)     = getNextToken xs
+getNextToken ('\f':xs)    = getNextToken xs
+getNextToken ('\t':xs)    = getNextToken xs
+getNextToken ('\v':xs)    = getNextToken xs
 
-getOneToken :: String -> Runtime [Token]
-getOneToken ('[':xs)     = addToken LBRA    xs
-getOneToken (']':xs)     = addToken RBRA    xs
-getOneToken ('+':xs)     = addToken PLUS    xs
-getOneToken ('-':xs)     = addToken MINUS   xs
-getOneToken ('*':xs)     = addToken MULT    xs
-getOneToken ('/':xs)     = addToken DIV     xs
-getOneToken ('(':xs)     = addToken LPAREN  xs
-getOneToken (')':xs)     = addToken RPAREN  xs
-getOneToken (':':xs)     = addToken COLON   xs
-getOneToken ('&':xs)     = addToken CONCAT  xs
-getOneToken ('<':'=':xs) = addToken TLTE    xs
-getOneToken ('>':'=':xs) = addToken TGTE    xs
-getOneToken ('!':'=':xs) = addToken TNE     xs
-getOneToken ('<':xs)     = addToken TLT     xs
-getOneToken ('=':xs)     = addToken TEQ     xs
-getOneToken ('>':xs)     = addToken TGT     xs
-getOneToken ('.':xs)     = addToken DOT     xs
-getOneToken (',':xs)     = addToken COMMA   xs
+getNextToken ('[':xs)     = addToken LBRA    xs
+getNextToken (']':xs)     = addToken RBRA    xs
+getNextToken ('+':xs)     = addToken PLUS    xs
+getNextToken ('-':xs)     = addToken MINUS   xs
+getNextToken ('*':xs)     = addToken MULT    xs
+getNextToken ('/':xs)     = addToken DIV     xs
+getNextToken ('(':xs)     = addToken LPAREN  xs
+getNextToken (')':xs)     = addToken RPAREN  xs
+getNextToken (':':xs)     = addToken COLON   xs
+getNextToken ('&':xs)     = addToken CONCAT  xs
+getNextToken ('<':'=':xs) = addToken TLTE    xs
+getNextToken ('>':'=':xs) = addToken TGTE    xs
+getNextToken ('!':'=':xs) = addToken TNE     xs
+getNextToken ('<':xs)     = addToken TLT     xs
+getNextToken ('=':xs)     = addToken TEQ     xs
+getNextToken ('>':xs)     = addToken TGT     xs
+getNextToken ('.':xs)     = addToken DOT     xs
+getNextToken (',':xs)     = addToken COMMA   xs
 
-getOneToken ('\'':xs)    = getStr xs
-getOneToken ('#':xs)     = return []
+getNextToken ('\'':xs)    = getStr xs
 
-getOneToken str@(x:xs)
+getNextToken str@(x:_)
     | isDigit x     = getNum str
     | isId x        = getId str >>= filterKeyword
 
-getOneToken (x:xs)  = tokenizeFail $ "umatched token " ++ (show x)
+getNextToken (x:_)  = tokenizeFail $ "umatched token " ++ (show x)
+getNextToken []     = return []
+
+addToken :: Token -> String -> Runtime [Token]
+addToken token rest = (token:) `liftM` getNextToken rest
 
 getNum :: String -> Runtime [Token]
 getNum str = addToken (INT (read numStr)) rest
@@ -101,12 +102,14 @@ getNum str = addToken (INT (read numStr)) rest
 
 getId :: String -> Runtime [Token]
 getId (x:xs) = addToken (ID (x:idTail)) rest
-    where (idTail, rest) = span isRestId xs
-          isRestId x = isId x || isDigit x
+    where (idTail, rest) = span isCharId xs
+          isCharId char = isId char || isDigit char
+getId _ = error "only non-empty lists are accepted"
 
 filterKeyword :: [Token] -> Runtime [Token]
 filterKeyword ((def@(ID name)):rest) = return (newToken:rest)
     where newToken = Map.findWithDefault def name keywords
+filterKeyword _ = error "only new ID tokens are accepted"
 
 getStr :: String -> Runtime [Token]
 getStr ('\'':rest)       = addToken (STR "") rest
@@ -136,5 +139,6 @@ parseInt :: Int -> String -> Int
 parseInt radix = foldl (\acc x -> acc * radix + digitToInt x) 0
 
 addChar :: Char -> String -> Runtime [Token]
-addChar char rest = getStr rest >>= prependWith char
-    where prependWith c ((STR str):ts) = return ((STR (c:str)):ts)
+addChar char rest = getStr rest >>= prepend
+    where prepend ((STR str):tokens) = return ((STR (char:str)):tokens)
+          prepend _ = error "only new string tokens are accepted"

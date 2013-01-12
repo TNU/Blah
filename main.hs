@@ -5,6 +5,7 @@ import qualified System.IO as IO
 
 import Blah
 
+main :: IO ()
 main = Env.getArgs >>= decideRunner
     where decideRunner [] = runRepl
           decideRunner (path:_) = runScriptByPath path

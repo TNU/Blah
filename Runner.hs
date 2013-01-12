@@ -2,11 +2,6 @@ module Runner (
     runLine,
 ) where
 
-import Control.Monad (liftM, liftM2)
-import Control.Monad.Trans.Error (runErrorT)
-
-import qualified Data.Map as Map
-
 import Parser
 import State
 import Eval
@@ -23,8 +18,8 @@ runStmt (Si ifStmt)      sep = runIfStmt ifStmt sep
 runStmt (Sw whileStmt)   sep = runWhileStmt whileStmt sep
 
 runAssign :: AssnStmt -> (Value -> Runtime ()) -> Runtime ()
-runAssign (AssnId name expr) sep = runExpr expr >>= setVar name >> doNothing
-runAssign (AssnElem elem expr) sep = runExpr expr >>=elemAssn elem >> doNothing
+runAssign (AssnId name expr)  _ = runExpr expr >>= setVar name >> doNothing
+runAssign (AssnElem ele expr) _ = runExpr expr >>= elemAssn ele >> doNothing
 
 runIfStmt :: IfStmt -> (Value -> Runtime ()) -> Runtime ()
 runIfStmt (If test line) sep = testExpr test >>= decider
@@ -38,8 +33,8 @@ runIfStmt (IfElse test ifLines elseIfStmt) sep = testExpr test >>= decider
           decider False = runIfStmt elseIfStmt sep
 
 runWhileStmt :: WhileStmt -> (Value -> Runtime ()) -> Runtime ()
-runWhileStmt stmt@(While test lines) sep = testExpr test >>= decider
-    where decider True  = runLine lines sep >> runWhileStmt stmt sep
+runWhileStmt stmt@(While test line) sep = testExpr test >>= decider
+    where decider True  = runLine line sep >> runWhileStmt stmt sep
           decider False = doNothing
 
 doNothing :: Runtime ()

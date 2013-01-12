@@ -16,7 +16,6 @@ module State (
     newRuntime,
 ) where
 
-import Control.Monad (liftM)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
@@ -89,10 +88,6 @@ getInput :: Runtime IO.Handle
 getInput = usingState get >>= onlyInput
     where onlyInput (input, _, _) = return input
 
-getScope :: Runtime Scope
-getScope = usingState get >>= onlyScope
-    where onlyScope (_, scope, _) = return scope
-
 getHeap :: Runtime Heap
 getHeap = usingState get >>= onlyHeap
     where onlyHeap (_, _, heap) = return heap
@@ -136,7 +131,7 @@ instance Show Value where
 
 {- Garbage Collection -}
 gc :: Heap -> Scope -> Heap
-gc (Memory items freeIndices numIns) scope = Memory newItems newFreeIndices 0
+gc (Memory items freeIndices _) scope = Memory newItems newFreeIndices 0
     where refSet = Map.foldr (traceVar items) freeIndices scope
           nulled = Seq.mapWithIndex (nullify refSet) items
           trimmed = Seq.foldrWithIndex (trim refSet) (Seq.empty, True) nulled
@@ -145,22 +140,22 @@ gc (Memory items freeIndices numIns) scope = Memory newItems newFreeIndices 0
           newFreeIndices = Set.fromList (take newSize [0..]) Set.\\ refSet
 
 traceVar :: Seq.Seq Value -> Value -> Set.Set Int -> Set.Set Int
-traceVar seq (Vrl i)      seen = trace seq i seen
-traceVar seq (Vbsf _ i _) seen = trace seq i seen
-traceVar seq (Vl list)    seen = Fold.foldr (traceVar seq) seen list
-traceVar _     _          seen = seen
+traceVar index (Vrl i)      seen = trace index i seen
+traceVar index (Vbsf _ i _) seen = trace index i seen
+traceVar index (Vl list)    seen = Fold.foldr (traceVar index) seen list
+traceVar _     _            seen = seen
 
 trace :: Seq.Seq Value -> Int -> Set.Set Int -> Set.Set Int
-trace seq i seen
+trace index i seen
     | Set.member i seen = seen
-    | otherwise         = traceVar seq (Seq.index seq i) (Set.insert i seen)
+    | otherwise = traceVar index (Seq.index index i) (Set.insert i seen)
 
 nullify :: Set.Set Int -> Int -> Value -> Value
 nullify refSet index val = if Set.member index refSet then val else Vnothing
 
 trim :: Set.Set Int -> Int -> Value
                     -> (Seq.Seq Value, Bool) -> (Seq.Seq Value, Bool)
-trim refSet index value (items, True) = if Set.member index refSet
-                                        then (value Seq.<| items, False)
-                                        else (items, True)
-trim refSet index value (items, _)    = (value Seq.<| items, False)
+trim refSet index value (items, True)
+    | Set.member index refSet = (value Seq.<| items, False)
+    | otherwise               = (items, True)
+trim _      _     value (items, _) = (value Seq.<| items, False)

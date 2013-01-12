@@ -16,9 +16,9 @@ toBool :: Value -> Runtime Bool
 toBool Vnothing     = return False
 toBool (Vb x)       = return x
 toBool (Vi 0)       = return False
-toBool (Vi x)       = return True
+toBool (Vi _)       = return True
 toBool (Vs "")      = return False
-toBool (Vs x)       = return True
+toBool (Vs _)       = return True
 toBool (Vl x)       = return . not . Seq.null $ x
 toBool (Vrl i)      = getFromHeap i >>= toBool
 toBool (Vsf _ _)    = return True
@@ -34,6 +34,8 @@ oneToStr (Vi int)          = return . show $ int
 oneToStr (Vs string)       = return string
 oneToStr (Vsf _ name)      = return $ name ++ "(..)"
 oneToStr (Vbsf _ i name)   = return $ (show i) ++ ":" ++ name ++ "(..)"
+oneToStr (Vl _)  = error "Vl should be handled by the visit function"
+oneToStr (Vrl _) = error "Vrl should be handled by the visit function"
 
 toRepr :: Value -> Runtime String
 toRepr value = visit oneToRepr (Set.empty) value
@@ -57,19 +59,21 @@ oneToRepr (Vs string)  = return $ "'" ++ concatMap esc string ++ "'"
           esc '\\' = "\\\\"
           esc '\0' = "\\0"
           esc x    = [x]
+oneToRepr (Vl _)  = error "Vl should be handled by the visit function"
+oneToRepr (Vrl _) = error "Vrl should be handled by the visit function"
 
 visit :: (Value -> Runtime String) -> Set.Set Int -> Value -> Runtime String
-visit action seen (Vl list) = addBrackets `liftM` elemsToRepr
+visit _      seen (Vl list) = addBrackets `liftM` elemsToRepr
     where addBrackets elems = "[" ++ elems ++ "]"
           elemsToRepr   = Fold.foldr (liftM2 (++)) (return "") eachToRepr
-          eachToRepr    = Seq.mapWithIndex oneToRepr list
-          oneToRepr 0 x = visit toRepr seen x
-          oneToRepr _ x = (", " ++) `liftM` visit toRepr seen x
+          eachToRepr    = Seq.mapWithIndex elemToReprByIndex list
+          elemToReprByIndex 0 x = visit toRepr seen x
+          elemToReprByIndex _ x = (", " ++) `liftM` visit toRepr seen x
 visit action seen (Vrl index)
     | Set.member index seen = return "[...]"
     | otherwise             = getFromHeap index >>= visit action newSeen
         where newSeen = Set.insert index seen
-visit action seen value = action value
+visit action _ value = action value
 
 deref :: Value -> Runtime Value
 deref (Vrl i) = getFromHeap i

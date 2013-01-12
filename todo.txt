@@ -3,5 +3,3 @@
 - function definitions
 - temporary objects
 - performance optimization (loops)
-- comments
-- not operator

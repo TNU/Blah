@@ -1,6 +1,6 @@
 module Failure (
-    Failure(..),
-    Failable(..),
+    Failable,
+    Failure,
 
     tokenizeFail,
     parseFail,
