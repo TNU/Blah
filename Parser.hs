@@ -1,158 +1,11 @@
 module Parser (
-    Line(..),
-    Stmt(..),
-    IfStmt(..),
-    WhileStmt(..),
-    AssnStmt(..),
-    Decl(..),
-    OrOp(..),
-    AndOp(..),
-    NotOp(..),
-    Comp(..),
-    Join(..),
-    Arth(..),
-    Term(..),
-    Factor(..),
-    List(..),
-    Neg(..),
-    Obj(..),
-    Elem(..),
-    Args(..),
-    Call(..),
-    Paren(..),
     parse,
 ) where
 
 import Failure (parseFail)
-import Tokenizer (Token(..))
 import State (Runtime)
-
--- decls are showable and equable for testing
-data Decl = Dl Line
-          | Ds Stmt
-          | Db OrOp
-          | Dd AndOp
-          | Dm NotOp
-          | Dc Comp
-          | Dj Join
-          | Da Arth
-          | Dt Term
-          | Df Factor
-          | Di List
-          | Dk Token
-          | Dn Neg
-          | Do Obj
-          | De Elem
-          | Dp Paren
-          | Dr Args
-          | Dh Call
-          | Dnewline
-          deriving (Show, Eq)
-
-data Line = Ls Stmt
-          | Lm Line Stmt
-          deriving (Show, Eq)
-
-data Stmt = Se OrOp
-          | Si IfStmt
-          | Sw WhileStmt
-          | Sa AssnStmt
-          deriving (Show, Eq)
-
-data IfStmt = If OrOp Line
-            | IfOther OrOp Line Line
-            | IfElse OrOp Line IfStmt
-            deriving (Show, Eq)
-
-data WhileStmt = While OrOp Line
-               deriving (Show, Eq)
-
-data AssnStmt = AssnId String OrOp
-              | AssnElem Elem OrOp
-              deriving (Show, Eq)
-
-data OrOp = Oa AndOp
-          | Or OrOp AndOp
-          deriving (Show, Eq)
-
-data AndOp = An NotOp
-           | And AndOp NotOp
-           deriving (Show, Eq)
-
-data NotOp = Mc Comp
-           | Not Comp
-           deriving (Show, Eq)
-
-data Comp = Cj  Join
-          | Lt  Comp Join
-          | Eq  Comp Join
-          | Gt  Comp Join
-          | Lte Comp Join
-          | Gte Comp Join
-          | Neq Comp Join
-          deriving (Show, Eq)
-
-data Join = Ja Arth
-          | Concat Join Arth
-          deriving (Show, Eq)
-
-data Arth = At Term
-          | Add Arth Term
-          | Sub Arth Term
-          deriving (Show, Eq)
-
-data Term = Tf Factor
-          | Mult Term Factor
-          | Div Term Factor
-          deriving (Show, Eq)
-
-data Factor = Fp Neg
-            | Fn Neg
-            | Fb Bool
-            | Fs String
-            | Fl List
-            | Fnothing
-            deriving (Show, Eq)
-
-data List = Lempty
-          | Lone OrOp
-          | Lcons List OrOp
-          deriving (Show, Eq)
-
-data Neg  = Ni Int
-          | Nd String
-          | Np Paren
-          | No Obj
-          | Ne Elem
-          | Nc Call
-          deriving (Show, Eq)
-
-data Obj = PropS String String
-         | PropD String String
-         | PropL List   String
-         | PropP Paren  String
-         | PropO Obj    String
-         | PropE Elem   String
-         deriving (Show, Eq)
-
-data Elem = ElemS String OrOp
-          | ElemD String OrOp
-          | ElemL List   OrOp
-          | ElemP Paren  OrOp
-          | ElemO Obj    OrOp
-          | ElemE Elem   OrOp
-          | ElemC Call   OrOp
-          deriving (Show, Eq)
-
-data Args = Rempty
-          | Rcons Args OrOp
-          deriving (Show, Eq)
-
-data Call = Call Neg Args
-          deriving (Show, Eq)
-
-data Paren = Pe OrOp
-           deriving (Show, Eq)
+import Tokens
+import Decls
 
 parse :: [Decl] -> [Token] -> Runtime [Decl]
 parse []              = shift []
@@ -271,12 +124,12 @@ reduce ((Dj join):(Dk TGT):(Dc comp):rest)  tokens = reduce ((Dc (Gt  comp join)
 
 {- not operation -}  -- not operation not allowed across lines
 reduce decls@((Dk NOT):_)    tokens@(_:_) = shift decls tokens
-reduce ((Dc comp):(Dk NOT):rest)   tokens = reduce ((Dm (Not comp)):rest) tokens
+reduce ((Dc comp):(Dk NOT):rest)   tokens = reduce ((Dz (Not comp)):rest) tokens
 
 {- and operation -}
 reduce decls@((Dd _):_)              tokens@(AND:_) = shift decls tokens
 reduce decls@((Dk AND):(Dd _):_)             tokens = shift decls tokens
-reduce ((Dm notop):(Dk AND):(Dd andop):rest) tokens = reduce ((Dd (And andop notop)):rest)  tokens
+reduce ((Dz notop):(Dk AND):(Dd andop):rest) tokens = reduce ((Dd (And andop notop)):rest)  tokens
 
 {- or operation -}
 reduce decls@((Db _):_)             tokens@(OR:_) = shift decls tokens
@@ -326,6 +179,31 @@ reduce ((Dk REPEAT):(Dl line):(Dk THEN):(Db orop):(Dk WHILE):rest) tokens = redu
 
 reduce ((Dk REPEAT):Dnewline:rest)           tokens = reduce ((Dk REPEAT):rest) tokens
 
+{- to -}
+reduce decls@((Dk TO):_)                                          tokens@(_:_) = shift decls tokens
+reduce decls@((Dk (ID _)):(Dk TO):_)                                    tokens = shift decls tokens
+reduce decls@((Dk WITH):(Dk (ID _)):(Dk TO):_)                          tokens = shift decls tokens
+reduce ((Dk (ID param)):(Dk WITH):(Dk (ID name)):(Dk TO):rest)          tokens = reduce ((Dm (Pcons Pempty param)):(Dk WITH):(Dk (ID name)):(Dk TO):rest) tokens
+reduce decls@((Dm _):(Dk WITH):(Dk (ID _)):(Dk TO):_)                   tokens = shift decls tokens
+reduce decls@((Dk COMMA):(Dm _):(Dk WITH):(Dk (ID _)):(Dk TO):_)        tokens = shift decls tokens
+reduce ((Dk (ID next)):(Dk COMMA):(Dm params):(Dk WITH):(Dk (ID name)):(Dk TO):rest)   tokens = reduce ((Dm (Pcons params next)):(Dk WITH):(Dk (ID name)):(Dk TO):rest) tokens
+
+reduce decls@((Dk DO):(Dk (ID _)):(Dk TO):_)                            tokens = shift decls tokens
+reduce decls@((Dl _):(Dk DO):(Dk (ID _)):(Dk TO):_)                     tokens = shift decls tokens
+reduce ((Dk DONE):(Dl line):(Dk DO):(Dk (ID name)):(Dk TO):rest)        tokens = reduce ((Ds (St (Func name Pempty line))):rest) tokens
+
+reduce decls@((Dk DO):(Dm _):(Dk WITH):(Dk (ID _)):(Dk TO):_)                          tokens = shift decls tokens
+reduce decls@((Dl _):(Dk DO):(Dm _):(Dk WITH):(Dk (ID _)):(Dk TO):_)                   tokens = shift decls tokens
+reduce ((Dk DONE):(Dl line):(Dk DO):(Dm params):(Dk WITH):(Dk (ID name)):(Dk TO):rest) tokens = reduce ((Ds (St (Func name params line))):rest) tokens
+
+reduce ((Dk WITH):Dnewline:rest)    tokens = reduce ((Dk WITH):rest) tokens
+reduce ((Dk DO):Dnewline:rest)      tokens = reduce ((Dk DO):rest) tokens
+reduce ((Dk DONE):Dnewline:rest)    tokens = reduce ((Dk DONE):rest) tokens
+
+{- return -}
+reduce decls@((Dk RETURN):_)  tokens@(_:_) = shift decls tokens
+reduce ((Db orop):(Dk RETURN):rest) tokens = reduce ((Ds (Sr (Return orop))):rest) tokens
+
 {- comma line combination -}  -- comma cannot be the last character in a line
 reduce decls@((Dl _):_)          tokens@(COMMA:_) = shift decls tokens
 reduce decls@((Dk COMMA):(Dl _):_)   tokens@(_:_) = shift decls tokens
@@ -357,8 +235,8 @@ reduce ((Df fact):rest)      tokens = reduce ((Dt (Tf fact)):rest)  tokens
 reduce ((Dt term):rest)      tokens = reduce ((Da (At term)):rest)  tokens
 reduce ((Da arth):rest)      tokens = reduce ((Dj (Ja arth)):rest)  tokens
 reduce ((Dj join):rest)      tokens = reduce ((Dc (Cj join)):rest)  tokens
-reduce ((Dc comp):rest)      tokens = reduce ((Dm (Mc comp)):rest)  tokens
-reduce ((Dm notop):rest)     tokens = reduce ((Dd (An notop)):rest)  tokens
+reduce ((Dc comp):rest)      tokens = reduce ((Dz (Mc comp)):rest)  tokens
+reduce ((Dz notop):rest)     tokens = reduce ((Dd (An notop)):rest)  tokens
 reduce ((Dd andop):rest)     tokens = reduce ((Db (Oa andop)):rest) tokens
 reduce ((Db orop):rest)      tokens = reduce ((Ds (Se orop)):rest)  tokens
 reduce ((Ds stmt):rest)      tokens = reduce ((Dl (Ls stmt)):rest)  tokens
@@ -371,8 +249,8 @@ reduce decls        tokens  = parseFail $ (show decls) ++ " " ++ (show tokens)
 demote :: Decl -> Decl
 demote (Ds (Se orop))  = demote (Db orop)
 demote (Db (Oa andop)) = demote (Dd andop)
-demote (Dd (An notop)) = demote (Dm notop)
-demote (Dm (Mc comp))  = demote (Dc comp)
+demote (Dd (An notop)) = demote (Dz notop)
+demote (Dz (Mc comp))  = demote (Dc comp)
 demote (Dc (Cj join))  = demote (Dj join)
 demote (Dj (Ja arth))  = demote (Da arth)
 demote (Da (At term))  = demote (Dt term)

@@ -4,6 +4,11 @@ module State (
 
     getVar,
     setVar,
+
+    getStackHeight,
+    pushScope,
+    popScope,
+
     addToHeap,
     setAtHeap,
     getFromHeap,
@@ -16,6 +21,7 @@ module State (
     newRuntime,
 ) where
 
+import Data.List (intercalate)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Error
@@ -28,10 +34,12 @@ import qualified Data.Foldable as Fold
 
 import Failure
 import Memory
+import Decls(Line)
 
 type Scope          = Map.Map String Value
+type Stack          = [Scope]
 type Heap           = Memory Value
-type StateData      = (IO.Handle, Scope, Heap)
+type StateData      = (IO.Handle, Scope, Stack, Heap)
 type RuntimeState   = StateT StateData IO
 type Runtime        = Failable RuntimeState
 
@@ -47,22 +55,30 @@ data Value = Vnothing
            | Vrl Int
            | Vsf SysFunc String
            | Vbsf BoundSysFunc Int String
+           | Vuf [String] Line String
+           | Vbuf [String] Line Int String
 
 {- State Modifiers -}
 setVar :: String -> Value -> Runtime ()
-setVar name val = do (input, scope, heap) <- usingState get
-                     let newScope = Map.insert name val scope
+setVar name val = do (input, globals, stack, heap) <- usingState get
+                     let (newGlobals, newStack) = updateEither globals stack
                          newHeap = if numInserts heap > 5
-                                   then gc heap newScope
+                                   then gc heap newGlobals newStack
                                    else heap
-                     usingState . put $ (input, newScope, newHeap)
+                     usingState . put $ (input, newGlobals, newStack, newHeap)
+    where updateEither globals (top:rest) = (globals, ((setScope top):rest))
+          updateEither globals [] = (setScope globals, [])
+          setScope = Map.insert name val
 
 getVar ::  String -> Runtime Value
 getVar name = usingState get >>= find
-    where find (_, scope, _) = toVal (Map.lookup name scope)
-          toVal (Just val)   = return val
-          toVal Nothing      = evalFail  $ "variable " ++ (show name)
-                                        ++ " does not exist"
+    where find (_, globals, [], _) = toVal (Map.lookup name globals)
+          find (_, globals, (top:_), _) = toValOr (Map.lookup name top) globals
+          toValOr (Just val) _       = return val;
+          toValOr Nothing    globals = toVal (Map.lookup name globals)
+          toVal (Just val)           = return val
+          toVal Nothing              = evalFail  $ "variable " ++ (show name)
+                                                ++ " does not exist"
 
 addToHeap :: Value -> Runtime Int
 addToHeap val = do heap <- getHeap
@@ -86,15 +102,29 @@ getFromHeap index = do heap <- getHeap
 
 getInput :: Runtime IO.Handle
 getInput = usingState get >>= onlyInput
-    where onlyInput (input, _, _) = return input
+    where onlyInput (input, _, _, _) = return input
+
+getStackHeight :: Runtime Int
+getStackHeight = usingState get >>= len
+    where len (_, _, stack, _) = return (length stack)
+
+popScope :: Runtime Scope
+popScope = usingState get >>= pop
+    where pop (_, _, (top:_), _) = return top
+          pop (_, _, _, _)  = error "poping empty stack"
+
+pushScope :: Scope -> Runtime ()
+pushScope = usingState . modify . push
+    where push newScope (input, globals, stack, heap) =
+                        (input, globals, (newScope:stack), heap)
 
 getHeap :: Runtime Heap
 getHeap = usingState get >>= onlyHeap
-    where onlyHeap (_, _, heap) = return heap
+    where onlyHeap (_, _, _, heap) = return heap
 
 setHeap :: Heap -> Runtime ()
 setHeap = usingState . modify . set
-    where set heap (input, scope, _) = (input, scope, heap)
+    where set heap (input, globals, stack, _) = (input, globals, stack, heap)
 
 {- IO Operations -}
 readLine :: Runtime String
@@ -116,7 +146,7 @@ run :: Runtime a -> StateData -> IO (Either Failure a)
 run = evalStateT . runErrorT
 
 newRuntime :: IO.Handle -> Scope -> StateData
-newRuntime input scope = (input, scope, newMemory)
+newRuntime input scope = (input, scope, [], newMemory)
 
 {- Value -}
 instance Show Value where
@@ -128,16 +158,20 @@ instance Show Value where
     show (Vl list)      = show (Fold.toList list)
     show (Vsf _ name)   = name ++ "(..)"
     show (Vbsf _ i name) = (show i) ++ ":" ++ name ++ "(..)"
+    show (Vuf args _ name)   = name ++ "(" ++ (intercalate ", " args) ++ ")"
+    show (Vbuf args _ i name) = (show i) ++ ":" ++ name ++ "(" ++ (intercalate ", " args) ++ ")"
 
 {- Garbage Collection -}
-gc :: Heap -> Scope -> Heap
-gc (Memory items freeIndices _) scope = Memory newItems newFreeIndices 0
-    where refSet = Map.foldr (traceVar items) freeIndices scope
-          nulled = Seq.mapWithIndex (nullify refSet) items
+gc :: Heap -> Scope -> Stack -> Heap
+gc (Memory items _ _) globals stack = Memory newItems newFreeIndices 0
+    where (newItems, _) = trimmed
           trimmed = Seq.foldrWithIndex (trim refSet) (Seq.empty, True) nulled
-          (newItems, _) = trimmed
-          newSize = Seq.length newItems
+          nulled = Seq.mapWithIndex (nullify refSet) items
           newFreeIndices = Set.fromList (take newSize [0..]) Set.\\ refSet
+          newSize = Seq.length newItems
+          refSet = foldr traceScope (Set.empty) (globals:stack)
+          traceScope :: Scope -> Set.Set Int -> Set.Set Int
+          traceScope scope refs = Map.foldr (traceVar items) refs scope
 
 traceVar :: Seq.Seq Value -> Value -> Set.Set Int -> Set.Set Int
 traceVar index (Vrl i)      seen = trace index i seen

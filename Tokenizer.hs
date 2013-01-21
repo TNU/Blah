@@ -1,5 +1,4 @@
 module Tokenizer (
-    Token(..),
     tokenize,
 ) where
 
@@ -10,25 +9,7 @@ import Data.Char (isDigit, isAlpha, isOctDigit, isHexDigit, digitToInt, chr)
 
 import Failure (tokenizeFail)
 import State
-
-data Token = INT Int
-           | ID String
-           | STR String
-           | TRUE | FALSE
-           | NOTHING
-           | DOT
-           | LBRA | RBRA
-           | PLUS | MINUS | MULT | DIV
-           | CONCAT
-           | TLT | TEQ | TGT
-           | TLTE | TGTE | TNE
-           | AND | OR | NOT
-           | COLON
-           | IF | THEN | ELSE | OTHER | FI
-           | WHILE | REPEAT
-           | LPAREN | RPAREN
-           | COMMA
-           deriving (Show, Eq)
+import Tokens
 
 isId :: Char -> Bool
 isId x      = isAlpha x || x == '_'
@@ -47,7 +28,12 @@ keywords = Map.fromList [
         ("otherwise", OTHER),
         ("fi",        FI),
         ("while",     WHILE),
-        ("repeat",    REPEAT)
+        ("repeat",    REPEAT),
+        ("to",        TO),
+        ("with",      WITH),
+        ("do",        DO),
+        ("done",      DONE),
+        ("return",    RETURN)
     ]
 
 tokenize :: Runtime [Token]

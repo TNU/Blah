@@ -11,10 +11,11 @@ import qualified Data.Map as Map
 import Failure
 import State
 import Functions
-import Tokenizer (tokenize)
-import Parser (parse, Decl(..))
+import Tokenizer
+import Parser
+import Decls (Decl(..))
 import Converters (toStr)
-import Runner (runLine)
+import Eval (runLine)
 
 runRepl :: IO ()
 runRepl = run repl replRuntime >> return ()
@@ -85,6 +86,6 @@ scriptLine :: [Decl] -> Runtime ()
 scriptLine []               = return ()
 scriptLine (Dnewline:rest)  = script rest
 scriptLine ((Dl line):rest) = runLine line ignore >> script rest
-    where ignore val = return ()
-scriptLine (decl:rest)  = error $ "unexpected decl in script: " ++ (show decl)
+    where ignore _ = return ()
+scriptLine (decl:_)         = error $ "unexpected decl in script: " ++ (show decl)
 

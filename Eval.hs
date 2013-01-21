@@ -1,23 +1,68 @@
 module Eval (
-    Expr,
-    runExpr,
-    testExpr,
-    elemAssn,
+    runLine,
 ) where
 
 import Control.Monad (liftM, liftM2, liftM3, join)
 
 import qualified Data.Foldable as Fold
 import qualified Data.Sequence as Seq
+import qualified Data.Map as Map
 
 import Failure (evalFail, typeFail1, typeFail2)
-import Parser
+import Decls
 import State
 import Converters
 import Properties
 
-type Expr = OrOp
+{- line -}
+runLine :: Line -> (Value -> Runtime ()) -> Runtime ()
+runLine (Ls stmt)        sep = runStmt stmt sep
+runLine (Lm line stmt)   sep = runLine line sep >> runStmt stmt sep
 
+{- stmt -}
+runStmt :: Stmt -> (Value -> Runtime ()) -> Runtime ()
+runStmt (Se expr)        sep = runExpr expr >>= sep
+runStmt (Sa assnStmt)    sep = runAssign assnStmt sep
+runStmt (Si ifStmt)      sep = runIfStmt ifStmt sep
+runStmt (Sw whileStmt)   sep = runWhileStmt whileStmt sep
+runStmt (St toStmt)      sep = runToStmt toStmt sep
+runStmt (Sr returnStmt)  sep = runReturnStmt returnStmt sep
+
+{- assign -}
+runAssign :: AssnStmt -> (Value -> Runtime ()) -> Runtime ()
+runAssign (AssnId name expr)  _ = runExpr expr >>= setVar name >> doNothing
+runAssign (AssnElem ele expr) _ = runExpr expr >>= elemAssn ele >> doNothing
+
+{- if -}
+runIfStmt :: IfStmt -> (Value -> Runtime ()) -> Runtime ()
+runIfStmt (If test line) sep = testExpr test >>= decider
+    where decider True  = runLine line sep
+          decider False = doNothing
+runIfStmt (IfOther test ifLines otherLine) sep = testExpr test >>= decider
+    where decider True  = runLine ifLines   sep
+          decider False = runLine otherLine sep
+runIfStmt (IfElse test ifLines elseIfStmt) sep = testExpr test >>= decider
+    where decider True  = runLine ifLines      sep
+          decider False = runIfStmt elseIfStmt sep
+
+{- while -}
+runWhileStmt :: WhileStmt -> (Value -> Runtime ()) -> Runtime ()
+runWhileStmt stmt@(While test line) sep = testExpr test >>= decider
+    where decider True  = runLine line sep >> runWhileStmt stmt sep
+          decider False = doNothing
+
+{- to -}
+runToStmt :: ToStmt -> (Value -> Runtime()) -> Runtime()
+runToStmt (Func name args line) _ = setVar name userFunc >> doNothing
+    where userFunc = (Vuf (getNames args []) line name)
+          getNames (Pcons rest argName) argList = getNames rest (argName:argList)
+          getNames (Pempty)             argList = argList
+
+{- return -}
+runReturnStmt :: ReturnStmt -> (Value -> Runtime()) -> Runtime()
+runReturnStmt (Return expr) _ = runExpr expr >> doNothing
+
+{- elem -}
 elemAssn :: Elem -> Value -> Runtime ()
 elemAssn (ElemS str i)   v = setElemHelper (return (Vs str)) (runExpr i) v
 elemAssn (ElemD name i)  v = setElemHelper (getVar name) (runExpr i) v
@@ -176,9 +221,19 @@ evalNeg (Ne x) = evalElem x
 {- call -}
 evalCall :: Call -> Runtime Value
 evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
-    where callFunc (Vsf  func _) vals   = func vals
-          callFunc (Vbsf func i _) vals = func i vals
-          callFunc x         _          = typeFail1 "function call" x
+    where callFunc (Vsf  func _)         vals = func vals
+          callFunc (Vbsf func i _)       vals = func i vals
+          callFunc (Vuf argNames line _) vals = evalUserCall argNames vals line
+          callFunc x         _                = typeFail1 "function call" x
+
+evalUserCall :: [String] -> [Value] -> Line -> Runtime Value
+evalUserCall args values line = tryNoReturn
+    where tryNoReturn = pushScope newScope >> runFunc >> popScope >> returnNothing
+          newScope = Map.fromList (zip args values)
+          runFunc = runLine line ignore
+          ignore _ = return ()
+          returnNothing = return Vnothing
+
 
 {- args -}
 evalArgs :: Args -> Runtime [Value]
@@ -231,8 +286,11 @@ applyBinOpOnVal binOp a b = do da <- a >>= deref
 applyBinOp :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
 applyBinOp binOp a b = join (liftM2 binOp a b)
 
-runExpr :: Expr -> Runtime Value
-runExpr expr = snd `liftM` evalOrop expr
+runExpr :: OrOp -> Runtime Value
+runExpr orop = snd `liftM` evalOrop orop
 
-testExpr :: Expr -> Runtime Bool
-testExpr expr = fst `liftM` evalOrop expr
+testExpr :: OrOp -> Runtime Bool
+testExpr orop = fst `liftM` evalOrop orop
+
+doNothing :: Runtime ()
+doNothing = return ()
