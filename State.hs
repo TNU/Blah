@@ -149,9 +149,9 @@ getStackHeight :: Runtime Int
 getStackHeight = usingState get >>= len
     where len (_, _, stack, _) = return (length stack)
 
-popScope :: Runtime Scope
-popScope = usingState get >>= pop
-    where pop (_, _, (top:_), _) = return top
+popScope :: Runtime ()
+popScope = usingState . modify $ pop
+    where pop (input, globals, (_:stack), heap) = (input, globals, stack, heap)
           pop (_, _, _, _)  = error "poping empty stack"
 
 pushScope :: Scope -> Runtime ()

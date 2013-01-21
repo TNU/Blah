@@ -248,7 +248,7 @@ evalUserCall args values line = tryNoReturn `catchSignal` handleReturn
           runFunc = runLine line ignore
           ignore _ = return ()
           nullify = return Vnothing
-          handleReturn (Sreturn value)      = return value
+          handleReturn (Sreturn value)      = popScope >> return value
           handleReturn failure@(Sfailure _) = throwSignal failure
 
 {- args -}
