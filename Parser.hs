@@ -2,8 +2,7 @@ module Parser (
     parse,
 ) where
 
-import Failure (parseFail)
-import State (Runtime)
+import State (Runtime, parseFail)
 import Tokens
 import Decls
 

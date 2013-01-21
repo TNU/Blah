@@ -7,7 +7,6 @@ import qualified Data.Map as Map
 import Control.Monad (liftM)
 import Data.Char (isDigit, isAlpha, isOctDigit, isHexDigit, digitToInt, chr)
 
-import Failure (tokenizeFail)
 import State
 import Tokens
 

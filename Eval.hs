@@ -1,18 +1,33 @@
 module Eval (
-    runLine,
+    runProgram,
 ) where
 
 import Control.Monad (liftM, liftM2, liftM3, join)
 
+import System.Exit
 import qualified Data.Foldable as Fold
 import qualified Data.Sequence as Seq
 import qualified Data.Map as Map
 
-import Failure (evalFail, typeFail1, typeFail2)
 import Decls
 import State
 import Converters
 import Properties
+
+{- signals -}
+runProgram :: Line -> (Value -> Runtime ()) -> Runtime ()
+                   -> (String -> Runtime ()) -> Runtime ()
+runProgram line endLine onNormal onFailure = output `catchSignal` handleSignal
+    where output = runLine line endLine >> onNormal
+          handleSignal (Sreturn value) = exitProgram value
+          handleSignal (Sfailure failure) = onFailure (show failure)
+
+exitProgram :: Value -> Runtime ()
+exitProgram (Vi 0)    = usingIO . exitWith $ ExitSuccess
+exitProgram (Vi code) = usingIO . exitWith . ExitFailure $ code
+exitProgram value = toBool value >>= succeeded
+    where succeeded True = usingIO exitSuccess
+          succeeded False = usingIO exitFailure
 
 {- line -}
 runLine :: Line -> (Value -> Runtime ()) -> Runtime ()
@@ -60,7 +75,7 @@ runToStmt (Func name args line) _ = setVar name userFunc >> doNothing
 
 {- return -}
 runReturnStmt :: ReturnStmt -> (Value -> Runtime()) -> Runtime()
-runReturnStmt (Return expr) _ = runExpr expr >> doNothing
+runReturnStmt (Return expr) _ = runExpr expr >>= throwSignal . Sreturn
 
 {- elem -}
 elemAssn :: Elem -> Value -> Runtime ()
@@ -227,13 +242,14 @@ evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
           callFunc x         _                = typeFail1 "function call" x
 
 evalUserCall :: [String] -> [Value] -> Line -> Runtime Value
-evalUserCall args values line = tryNoReturn
-    where tryNoReturn = pushScope newScope >> runFunc >> popScope >> returnNothing
+evalUserCall args values line = tryNoReturn `catchSignal` handleReturn
+    where tryNoReturn = pushScope newScope >> runFunc >> popScope >> nullify
           newScope = Map.fromList (zip args values)
           runFunc = runLine line ignore
           ignore _ = return ()
-          returnNothing = return Vnothing
-
+          nullify = return Vnothing
+          handleReturn (Sreturn value)      = return value
+          handleReturn failure@(Sfailure _) = throwSignal failure
 
 {- args -}
 evalArgs :: Args -> Runtime [Value]

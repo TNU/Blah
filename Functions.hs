@@ -6,9 +6,8 @@ import Control.Monad (liftM)
 
 import qualified Data.Map as Map
 
-import Failure
 import Converters (toStr)
-import State (Value(..), Runtime)
+import State (Value(..), Runtime, argFail)
 import qualified State as State
 
 sysFuncs :: Map.Map String Value

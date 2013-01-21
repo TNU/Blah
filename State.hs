@@ -1,4 +1,5 @@
 module State (
+    Signal(..),
     Value(..),
     Runtime,
 
@@ -19,6 +20,15 @@ module State (
     writeLine,
     run,
     newRuntime,
+
+    throwSignal,
+    catchSignal,
+    tokenizeFail,
+    parseFail,
+    evalFail,
+    typeFail1,
+    typeFail2,
+    argFail,
 ) where
 
 import Data.List (intercalate)
@@ -32,7 +42,6 @@ import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as Fold
 
-import Failure
 import Memory
 import Decls(Line)
 
@@ -41,10 +50,30 @@ type Stack          = [Scope]
 type Heap           = Memory Value
 type StateData      = (IO.Handle, Scope, Stack, Heap)
 type RuntimeState   = StateT StateData IO
-type Runtime        = Failable RuntimeState
+type Runtime        = ErrorT Signal RuntimeState
 
 type SysFunc        = [Value] -> Runtime Value
 type BoundSysFunc   = Int -> [Value] -> Runtime Value
+
+{- Signal -}
+data Signal = Sreturn Value
+            | Sfailure Failure
+            deriving (Show)
+
+instance Error Signal where
+    strMsg = Sfailure . Unknown
+
+{- Failure -}
+data Failure = Tokenize String
+             | Parse String
+             | Eval String
+             | Unknown String
+
+instance Show Failure where
+    show (Tokenize message) = "<tokenize> " ++ message
+    show (Parse message)    = "<parse> " ++ message
+    show (Eval message)     = "<eval> " ++ message
+    show (Unknown message)  = message
 
 {- Value -}
 data Value = Vnothing
@@ -57,6 +86,18 @@ data Value = Vnothing
            | Vbsf BoundSysFunc Int String
            | Vuf [String] Line String
            | Vbuf [String] Line Int String
+
+instance Show Value where
+    show Vnothing       = "Nothing"
+    show (Vi int)       = show int
+    show (Vb bool)      = show bool
+    show (Vs string)    = string
+    show (Vrl index)    = "LIST REF: " ++ (show index) ++ ""
+    show (Vl list)      = show (Fold.toList list)
+    show (Vsf _ name)   = name ++ "(..)"
+    show (Vbsf _ i name) = (show i) ++ ":" ++ name ++ "(..)"
+    show (Vuf args _ name)   = name ++ "(" ++ (intercalate ", " args) ++ ")"
+    show (Vbuf args _ i name) = (show i) ++ ":" ++ name ++ "(" ++ (intercalate ", " args) ++ ")"
 
 {- State Modifiers -}
 setVar :: String -> Value -> Runtime ()
@@ -77,7 +118,7 @@ getVar name = usingState get >>= find
           toValOr (Just val) _       = return val;
           toValOr Nothing    globals = toVal (Map.lookup name globals)
           toVal (Just val)           = return val
-          toVal Nothing              = evalFail  $ "variable " ++ (show name)
+          toVal Nothing              = evalFail $ "variable " ++ (show name)
                                                 ++ " does not exist"
 
 addToHeap :: Value -> Runtime Int
@@ -142,24 +183,11 @@ usingState = lift
 usingIO :: IO a -> Runtime a
 usingIO = lift . lift
 
-run :: Runtime a -> StateData -> IO (Either Failure a)
+run :: Runtime a -> StateData -> IO (Either Signal a)
 run = evalStateT . runErrorT
 
 newRuntime :: IO.Handle -> Scope -> StateData
 newRuntime input scope = (input, scope, [], newMemory)
-
-{- Value -}
-instance Show Value where
-    show Vnothing       = "Nothing"
-    show (Vi int)       = show int
-    show (Vb bool)      = show bool
-    show (Vs string)    = string
-    show (Vrl index)    = "LIST REF: " ++ (show index) ++ ""
-    show (Vl list)      = show (Fold.toList list)
-    show (Vsf _ name)   = name ++ "(..)"
-    show (Vbsf _ i name) = (show i) ++ ":" ++ name ++ "(..)"
-    show (Vuf args _ name)   = name ++ "(" ++ (intercalate ", " args) ++ ")"
-    show (Vbuf args _ i name) = (show i) ++ ":" ++ name ++ "(" ++ (intercalate ", " args) ++ ")"
 
 {- Garbage Collection -}
 gc :: Heap -> Scope -> Stack -> Heap
@@ -193,3 +221,32 @@ trim refSet index value (items, True)
     | Set.member index refSet = (value Seq.<| items, False)
     | otherwise               = (items, True)
 trim _      _     value (items, _) = (value Seq.<| items, False)
+
+{- Signals -}
+throwSignal :: Signal -> Runtime a
+throwSignal = throwError
+
+catchSignal :: Runtime a -> (Signal -> Runtime a) -> Runtime a
+catchSignal = catchError
+
+{- Failure -}
+tokenizeFail :: String -> Runtime a
+tokenizeFail = throwError . Sfailure . Tokenize
+
+parseFail ::  String -> Runtime a
+parseFail = throwError . Sfailure . Parse
+
+evalFail :: String -> Runtime a
+evalFail = throwError . Sfailure . Eval
+
+typeFail1 :: (Show a) => String -> a -> Runtime b
+typeFail1 opName x   = evalFail $ opName ++ " of \"" ++ (show x) ++ "\" "
+                                ++ "is not supported"
+
+typeFail2 :: (Show a) => String -> a -> a -> Runtime b
+typeFail2 opName x y = evalFail $ opName ++ " of \""
+                              ++ (show x) ++ "\" and \"" ++ (show y) ++ "\" "
+                              ++ "is not supported"
+
+argFail :: String -> Runtime a
+argFail expected = evalFail $ "unexpected arguments, expected " ++ expected

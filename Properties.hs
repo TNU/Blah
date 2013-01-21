@@ -7,7 +7,6 @@ import qualified Data.Sequence as Seq
 import Data.List
 import Data.Char
 
-import Failure (evalFail, typeFail1, argFail)
 import State
 
 valProp :: String -> Value -> Runtime Value

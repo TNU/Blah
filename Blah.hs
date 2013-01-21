@@ -3,19 +3,18 @@ module Blah (
     runScript
 ) where
 
-import Control.Monad.Trans.Error (catchError)
+import Control.Monad.Trans.Error (catchError, strMsg)
 
 import qualified System.IO as IO
 import qualified Data.Map as Map
 
-import Failure
 import State
 import Functions
 import Tokenizer
 import Parser
 import Decls (Decl(..))
 import Converters (toStr)
-import Eval (runLine)
+import Eval (runProgram)
 
 runRepl :: IO ()
 runRepl = run repl replRuntime >> return ()
@@ -29,9 +28,9 @@ replRest = replLine []
 
 replLine :: [Decl] -> Runtime ()
 
-replLine [(Dl line)]  = replError (runLine line replShowLine) >> replRest
-    where replError state = state `catchError` writeLine
-          replShowLine val = toStr val >>= writeLine
+replLine [(Dl line)] = runProgram line replShowLine replRest onError
+    where replShowLine val = toStr val >>= writeLine
+          onError message = writeLine message >> replRest
 
 replLine (line@((Dl _):_)) = replLine (Dnewline:line)
 
@@ -44,16 +43,18 @@ replLine unmatched = do
         else parseError parseRestLine >>= replLine
     where parseRestLine = tokenize >>= parse unmatched
           parseError state = state `catchError` handleError
-          handleError errorMessage = writeLine errorMessage >> return []
+          handleError (Sfailure failure) = writeLine (show failure) >> return []
+          handleError signal = error $ "unexpected signal: " ++ (show signal)
 
 replFail :: String -> Runtime ()
 replFail = writeLine . ("<repl> " ++)
 
 runScript :: IO.Handle -> IO ()
-runScript file = parseScript >>= runOrShowError . verifyAST
+runScript file = parseScript >>= runOrError . verifyAST
     where parseScript = run scriptParse (newRuntime file Map.empty)
-          runOrShowError (Left message) = putStrLn message
-          runOrShowError (Right decls)  = runAST decls >> return ()
+          runOrError (Right decls)  = runAST decls >> return ()
+          runOrError (Left (Sfailure failure)) = print failure
+          runOrError (Left sig) = error $ "unexpected signal: " ++ (show sig)
           runAST decls = run (script decls) (newRuntime IO.stdin sysFuncs)
 
 scriptParse :: Runtime [Decl]
@@ -69,23 +70,19 @@ scriptParseLine decls = do isEof <- isEOF
                                    scriptParseLine newDecls
 
 -- verifies that there are only line and newline decls
-verifyAST :: Either Failure [Decl] -> Either Failure [Decl]
+verifyAST :: Either Signal [Decl] -> Either Signal [Decl]
 verifyAST (Right decls)
     | all isValidDecl decls    = return decls
     | otherwise                = scriptFail "invalid decl"
     where isValidDecl (Dl _)   = True
           isValidDecl Dnewline = True
           isValidDecl _        = False
-          scriptFail        = Left . ("<script> " ++)
-verifyAST errorMessage      = errorMessage
+          scriptFail           = Left . strMsg . ("<script> " ++)
+verifyAST errorMessage         = errorMessage
 
 script :: [Decl] -> Runtime ()
-script line = scriptLine line `catchError` writeLine
-
-scriptLine :: [Decl] -> Runtime ()
-scriptLine []               = return ()
-scriptLine (Dnewline:rest)  = script rest
-scriptLine ((Dl line):rest) = runLine line ignore >> script rest
+script []               = return ()
+script (Dnewline:rest)  = script rest
+script ((Dl line):rest) = runProgram line ignore (script rest) writeLine
     where ignore _ = return ()
-scriptLine (decl:_)         = error $ "unexpected decl in script: " ++ (show decl)
-
+script (decl:_)         = error $ "unexpected decl in script: " ++ (show decl)
