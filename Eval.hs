@@ -244,7 +244,9 @@ evalCall (Call neg args) = applyBinOp callFunc (evalNeg neg) (evalArgs args)
 evalUserCall :: [String] -> [Value] -> Line -> Runtime Value
 evalUserCall args values line = tryNoReturn `catchSignal` handleReturn
     where tryNoReturn = pushScope newScope >> runFunc >> popScope >> nullify
-          newScope = Map.fromList (zip args values)
+          newScope = Map.fromList . zip args . reverse $ paddedValues
+          paddedValues = (replicate lengthDiff Vnothing) ++ values
+          lengthDiff = (length args) - (length values)
           runFunc = runLine line ignore
           ignore _ = return ()
           nullify = return Vnothing
