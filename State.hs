@@ -1,4 +1,5 @@
 module State (
+    Failure(..),
     Signal(..),
     Value(..),
     Runtime,
@@ -34,7 +35,7 @@ module State (
 import Data.List (intercalate)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Error
+import Control.Monad.Trans.Except
 
 import qualified System.IO as IO
 import qualified Data.Set as Set
@@ -50,7 +51,7 @@ type Stack          = [Scope]
 type Heap           = Memory Value
 type StateData      = (IO.Handle, Scope, Stack, Heap)
 type RuntimeState   = StateT StateData IO
-type Runtime        = ErrorT Signal RuntimeState
+type Runtime        = ExceptT Signal RuntimeState
 
 type SysFunc        = [Value] -> Runtime Value
 type BoundSysFunc   = Int -> [Value] -> Runtime Value
@@ -60,20 +61,15 @@ data Signal = Sreturn Value
             | Sfailure Failure
             deriving (Show)
 
-instance Error Signal where
-    strMsg = Sfailure . Unknown
-
 {- Failure -}
 data Failure = Tokenize String
              | Parse String
              | Eval String
-             | Unknown String
 
 instance Show Failure where
     show (Tokenize message) = "<tokenize> " ++ message
     show (Parse message)    = "<parse> " ++ message
     show (Eval message)     = "<eval> " ++ message
-    show (Unknown message)  = message
 
 {- Value -}
 data Value = Vnothing
@@ -184,7 +180,7 @@ usingIO :: IO a -> Runtime a
 usingIO = lift . lift
 
 run :: Runtime a -> StateData -> IO (Either Signal a)
-run = evalStateT . runErrorT
+run = evalStateT . runExceptT
 
 newRuntime :: IO.Handle -> Scope -> StateData
 newRuntime input scope = (input, scope, [], newMemory)
@@ -224,20 +220,20 @@ trim _      _     value (items, _) = (value Seq.<| items, False)
 
 {- Signals -}
 throwSignal :: Signal -> Runtime a
-throwSignal = throwError
+throwSignal = throwE
 
 catchSignal :: Runtime a -> (Signal -> Runtime a) -> Runtime a
-catchSignal = catchError
+catchSignal = catchE
 
 {- Failure -}
 tokenizeFail :: String -> Runtime a
-tokenizeFail = throwError . Sfailure . Tokenize
+tokenizeFail = throwE . Sfailure . Tokenize
 
 parseFail ::  String -> Runtime a
-parseFail = throwError . Sfailure . Parse
+parseFail = throwE . Sfailure . Parse
 
 evalFail :: String -> Runtime a
-evalFail = throwError . Sfailure . Eval
+evalFail = throwE . Sfailure . Eval
 
 typeFail1 :: (Show a) => String -> a -> Runtime b
 typeFail1 opName x   = evalFail $ opName ++ " of \"" ++ (show x) ++ "\" "

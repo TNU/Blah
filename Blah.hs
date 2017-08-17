@@ -3,7 +3,7 @@ module Blah (
     runScript
 ) where
 
-import Control.Monad.Trans.Error (catchError, strMsg)
+import Control.Monad.Trans.Except (catchE)
 
 import qualified System.IO as IO
 import qualified Data.Map as Map
@@ -42,7 +42,7 @@ replLine unmatched = do
              else replFail "unmatched decls at end of input"
         else parseError parseRestLine >>= replLine
     where parseRestLine = tokenize >>= parse unmatched
-          parseError state = state `catchError` handleError
+          parseError state = state `catchE` handleError
           handleError (Sfailure failure) = writeLine (show failure) >> return []
           handleError signal = error $ "unexpected signal: " ++ (show signal)
 
@@ -73,11 +73,11 @@ scriptParseLine decls = do isEof <- isEOF
 verifyAST :: Either Signal [Decl] -> Either Signal [Decl]
 verifyAST (Right decls)
     | all isValidDecl decls    = return decls
-    | otherwise                = scriptFail "invalid decl"
+    | otherwise                = parseFail "invalid decl"
     where isValidDecl (Dl _)   = True
           isValidDecl Dnewline = True
           isValidDecl _        = False
-          scriptFail           = Left . strMsg . ("<script> " ++)
+          parseFail            = Left . Sfailure . Parse
 verifyAST errorMessage         = errorMessage
 
 script :: [Decl] -> Runtime ()

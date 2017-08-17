@@ -47,7 +47,7 @@ You check out more examples in the tests directory.
 
 ## Compile and Use
 
-To compile Blah, run `ghc --make main.hs` in the root directory of the project.
+To compile Blah, run `ghc --make main.hs -o blah` in the root directory of the project.
 
 To run Blah in script mode, run `./blah your_blah_file.hs`.
 
