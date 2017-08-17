@@ -1,15 +1,14 @@
-Blah
-====
+# Blah
 
-Blah is a toy programming language written by Tian Yu Zhang.
+Blah is a toy programming language.
 
 It is written from scratch completely by hand, without using any generated code.
 
-###Samples
+## Samples
 
 Here is a sample of Blah code implementing FizzBuzz:
 
-    # the mod operator does not exist yet
+    # the mod operator does not exist in this language
     to check_a_divides_b with a, b do
         return a = 0 or (b / a) * a = b
     done
@@ -46,7 +45,7 @@ And here is a sample of recursion:
 
 You check out more examples in the tests directory.
 
-###Compile and Use
+## Compile and Use
 
 To compile Blah, run `ghc --make main.hs` in the root directory of the project.
 
