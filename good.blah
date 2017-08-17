@@ -1,0 +1,74 @@
+'=== Starting Functions ==='
+to dosomething with abc, good, bad do
+    Nothing
+done
+
+to dosomething with abc do Nothing done
+
+to dosomething
+with abc
+do Nothing done
+
+to dosomething
+with abc
+do Nothing done
+
+to dosomething
+with abc
+do Nothing done
+
+to dosomething
+with
+argument do Nothing done
+
+to add do
+    Nothing
+done
+
+to dosomething do
+    Nothing, Nothing
+done
+
+to meet with a, b, c do Nothing, Nothing done
+
+to dosomething with a, b, c do
+    Nothing
+    return 1
+done
+
+to return1 with a, b, c do
+    Nothing
+    return 1
+    return 2 + 8 / 5
+done
+
+to say with word do
+    writeLine(word)
+done
+
+say('hi')
+
+say(return1(1, 2, Nothing))
+
+to calcFactorial with n do
+    if n = 0 then
+        return 1
+    otherwise
+        return n * calcFactorial(n - 1)
+    fi
+done
+
+say(calcFactorial)
+
+writeLine(calcFactorial(0))
+say(calcFactorial(7))
+
+to testExtra with a, b, c do
+    writeLine(a, b, c)
+done
+
+testExtra(1, 2, 3)
+testExtra(1, 2, 3, 4)
+testExtra(1)
+testExtra()
+'=== End Functions ==='

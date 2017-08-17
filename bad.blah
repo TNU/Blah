@@ -1,0 +1,22 @@
+'= = = = = = = = = ='
+to dosomething with abc, good, bad do
+done
+'= = = = = = = = = ='
+to dosomething with  do Nothing done
+'= = = = = = = = = ='
+to
+dosomething
+with argument do Nothing done
+'= = = = = = = = = ='
+to
+dosomething,
+with argument do Nothing done
+'= = = = = = = = = ='
+to
+dosomething
+with ,argument do Nothing done
+'= = = = = = = = = ='
+to dosomething with a, b, c do
+    return return 2
+done
+'= = = = = = = = = ='

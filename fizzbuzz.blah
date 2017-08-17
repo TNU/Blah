@@ -1,0 +1,21 @@
+to check_a_divides_b with a, b do
+    return a = 0 or (b / a) * a = b
+done
+
+num: 1
+while num < 100 then
+    if check_a_divides_b(15, num) then
+        writeLine('FizzBuzz')
+
+    else if check_a_divides_b(3, num) then
+        writeLine('Fizz')
+
+    else if check_a_divides_b(5, num) then
+        writeLine('Buzz')
+
+    otherwise
+        writeLine(num)
+    fi
+
+    num: num + 1
+repeat

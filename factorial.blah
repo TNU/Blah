@@ -1,0 +1,9 @@
+to calcFactorial with n do
+    if n = 0 then
+        return 1
+    otherwise
+        return n * calcFactorial(n - 1)
+    fi
+done
+
+writeLine(calcFactorial(10))
